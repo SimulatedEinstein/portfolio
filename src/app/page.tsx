@@ -547,8 +547,8 @@ export default function Portfolio() {
         </motion.p>
 
         <motion.h1 initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.5, duration: 0.7 }}
-          style={{ fontSize: "clamp(3rem, 9vw, 7rem)", fontWeight: 700, lineHeight: 1.05, letterSpacing: "-0.02em", marginBottom: "1.5rem", fontFamily: "Georgia, 'Times New Roman', serif", color: "#f0e8d0" }}>
-          Ojas<br /><span style={{ color: GOLD }}>Kidilay</span>
+          style={{ fontSize: "clamp(3rem, 9vw, 7rem)", fontWeight: 400, lineHeight: 1.05, letterSpacing: "-0.02em", marginBottom: "1.5rem", fontFamily: "Georgia, 'Times New Roman', serif", color: "#f0e8d0" }}>
+          Ojas Kidilay<br />
         </motion.h1>
 
         <motion.p initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.7, duration: 0.6 }}
