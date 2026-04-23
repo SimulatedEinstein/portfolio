@@ -13,7 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata = {
-  title: "Ojas Kidilay | Physics-Informed AI Engineer",
+  title: "Ojas Kidilay | Physics + AI Engineer",
   description: "Portfolio of Ojas Kidilay",
   icons: {
     icon: "/icon.jpg",
