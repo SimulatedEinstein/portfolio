@@ -16,7 +16,7 @@ export const metadata = {
   title: "Ojas Kidilay | Physics + AI Engineer",
   description: "Portfolio of Ojas Kidilay",
   icons: {
-    icon: "/icon.jpg",
+    icon: "/public/icon.jpg",
   },
 };
 
