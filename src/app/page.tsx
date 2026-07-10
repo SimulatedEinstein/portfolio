@@ -389,31 +389,93 @@ const GOLD_DIM_ACCENT = "rgba(245, 158, 11, 0.15)";
 const GOLD = GOLD_ACCENT;
 const GOLD_DIM = GOLD_DIM_ACCENT;
 
-// ── Experience Item ──
-function ExpItem({ company, role, period, desc, delay }: { company: string; role: string; period: string; desc: string; delay: number }) {
+interface TimelineItem {
+  date: string;
+  role: string;
+  organization: string;
+  desc: string;
+  type: "Work" | "Education" | "Achievement";
+}
+
+const TIMELINE_DATA: TimelineItem[] = [
+  {
+    date: "Nov 2025 – Present",
+    role: "Graduate Trainee Engineer",
+    organization: "Bajaj Engineering Skills Training",
+    desc: "Conducted multi-physics simulations and structural validations for hydraulic circuits in SolidWorks, achieving alignment within ±5% of theoretical values. Researched and benchmarked deep learning models (LSTM vs Random Forest) for predicting component degradation using scientific ML principles, achieving 92% model accuracy. Developed numerical and algorithmic pipelines to automate engineering data analysis.",
+    type: "Work",
+  },
+  {
+    date: "Jul 2022 – Jun 2026",
+    role: "B.Tech, Mechanical Engineering",
+    organization: "Bajaj Institute of Technology, Wardha",
+    desc: "Specialized in fluid mechanics, thermodynamics, heat transfer, and mechanical structural analysis. Developed computational and mathematical programming models.",
+    type: "Education",
+  },
+  {
+    date: "May 2023 – Jul 2023",
+    role: "CAE & Simulation Intern",
+    organization: "Intrainz Innovation Pvt. Ltd.",
+    desc: "Developed kinematic and dynamic models for multi-DOF mechanical components, validating mechanical stress and structural compliance through CAE simulation. Implemented closed-loop control feedback systems and sensor-fusion algorithms, guiding iterative design improvements across 3 prototype iterations.",
+    type: "Work",
+  },
+  {
+    date: "SIH 2023",
+    role: "Smart India Hackathon 2023 — Runner-Up",
+    organization: "Smart India Hackathon (Govt. of India)",
+    desc: "Placed in the Top 5 of 390 teams nationally for creating an AI-driven IoT irrigation mechanism that optimizes water usage up to 30% through neural predictions and meteorological parameters.",
+    type: "Achievement",
+  },
+];
+
+// ── Timeline Card Component ──
+function TimelineCard({ item, idx }: { item: TimelineItem; idx: number }) {
   const ref = useRef<HTMLDivElement>(null);
-  const inView = useInView(ref, { once: true, margin: "-60px" });
+  const inView = useInView(ref, { once: true, margin: "-40px" });
 
   return (
     <motion.div
       ref={ref}
-      initial={{ opacity: 0, x: -24 }}
+      initial={{ opacity: 0, x: -20 }}
       animate={inView ? { opacity: 1, x: 0 } : {}}
-      transition={{ duration: 0.55, delay }}
-      style={{ display: "grid", gridTemplateColumns: "140px 1px 1fr", gap: "0 2rem", paddingBottom: "2.5rem" }}
+      transition={{ duration: 0.55, delay: idx * 0.12 }}
+      className="timeline-item-container"
+      style={{ position: "relative" }}
     >
-      <div style={{ fontFamily: "Georgia, 'Times New Roman', serif", fontStyle: "italic", fontSize: 13, color: "#5a5248", textAlign: "right", paddingTop: 4, lineHeight: 1.4 }}>
-        {period}
-      </div>
-      <div style={{ width: 1, background: GOLD_DIM, position: "relative" }}>
-        <div style={{ position: "absolute", top: 6, left: "50%", transform: "translateX(-50%)", width: 8, height: 8, borderRadius: "50%", background: GOLD, boxShadow: `0 0 8px ${GOLD}` }} />
-      </div>
-      <div style={{ paddingBottom: "2rem" }}>
-        <div style={{ fontSize: 12, fontFamily: "Georgia, 'Times New Roman', serif", fontStyle: "italic", color: GOLD, letterSpacing: "0.05em", marginBottom: 4 }}>
-          {company}
+      {/* Node Circle */}
+      <div 
+        className="timeline-dot"
+        style={{
+          position: "absolute",
+          left: "-2.65rem",
+          top: 6,
+          width: 10,
+          height: 10,
+          borderRadius: "50%",
+          background: item.type === "Education" ? "#00d2ff" : GOLD,
+          border: `2.5px solid #0a0a0d`,
+          boxShadow: `0 0 6px ${item.type === "Education" ? "rgba(0, 210, 255, 0.3)" : "rgba(245, 158, 11, 0.3)"}`,
+          zIndex: 2,
+          transition: "all 0.25s ease",
+        }} 
+      />
+
+      {/* Main Card Body */}
+      <div className="timeline-card">
+        <div style={{ display: "flex", flexWrap: "wrap", alignItems: "baseline", justifyContent: "space-between", gap: 8, marginBottom: 8 }}>
+          <span style={{ fontSize: 11, fontStyle: "italic", color: item.type === "Education" ? "#00d2ff" : GOLD, letterSpacing: "0.08em", textTransform: "uppercase" }}>
+            {item.type} · {item.date}
+          </span>
         </div>
-        <div style={{ fontSize: "1.1rem", fontWeight: 700, marginBottom: "0.5rem", fontFamily: "Georgia, 'Times New Roman', serif", color: "#f0e8d0" }}>{role}</div>
-        <p style={{ fontSize: 13.5, color: "#8a8070", lineHeight: 1.75, fontFamily: "Georgia, 'Times New Roman', serif" }}>{desc}</p>
+        <h3 style={{ fontSize: "1.15rem", fontWeight: 700, color: "#f0e8d0", marginBottom: 3 }}>
+          {item.role}
+        </h3>
+        <h4 style={{ fontSize: "0.95rem", fontStyle: "italic", color: "#8a8070", marginBottom: 12 }}>
+          {item.organization}
+        </h4>
+        <p style={{ fontSize: "0.92rem", lineHeight: 1.6, color: "#a1a1aa" }}>
+          {item.desc}
+        </p>
       </div>
     </motion.div>
   );
@@ -1147,6 +1209,25 @@ export default function Portfolio() {
           border-color: rgba(245, 158, 11, 0.4) !important;
         }
 
+        /* Timeline interactive classes */
+        .timeline-card {
+          padding: 1.5rem 1.8rem !important;
+          background: rgba(18, 19, 24, 0.76) !important;
+          border: 0.5px solid rgba(245, 158, 11, 0.15) !important;
+          border-radius: 6px !important;
+          transition: all 0.35s cubic-bezier(0.25, 0.8, 0.25, 1) !important;
+        }
+        .timeline-card:hover {
+          border-color: #f59e0b !important;
+          box-shadow: 0 0 25px rgba(245, 158, 11, 0.22) !important;
+          transform: translateY(-2px);
+        }
+        .timeline-item-container:hover .timeline-dot {
+          transform: scale(1.3) !important;
+          box-shadow: 0 0 14px #f59e0b !important;
+          background: #f59e0b !important;
+        }
+
         @keyframes pulse-line { 0%,100% { opacity:0.3; } 50% { opacity:1; } }
         @keyframes dash { to { stroke-dashoffset: -20; } }
       `}</style>
@@ -1241,27 +1322,29 @@ export default function Portfolio() {
         </motion.div>
       </section>
 
-      {/* ── EXPERIENCE ── */}
-      <section id="experience" style={{ padding: "5rem 2rem", maxWidth: 900, margin: "0 auto", position: "relative", zIndex: 10 }}>
-        <div style={{ textAlign: "center", marginBottom: "3rem" }}>
-          <span style={{ fontFamily: "Georgia, 'Times New Roman', serif", fontStyle: "italic", fontSize: 12, color: GOLD, letterSpacing: "0.2em", textTransform: "uppercase", display: "block", marginBottom: "0.75rem" }}>Career</span>
-          <h2 style={{ fontSize: "clamp(1.8rem, 4vw, 2.8rem)", fontWeight: 700, letterSpacing: "-0.01em", fontFamily: "Georgia, 'Times New Roman', serif", color: "#f0e8d0" }}>Experience</h2>
+      {/* ── EXPERIENCE (TIMELINE) ── */}
+      <section id="experience" style={{ padding: "5rem 2rem", maxWidth: 800, margin: "0 auto", position: "relative", zIndex: 10 }}>
+        <div style={{ textAlign: "center", marginBottom: "4rem" }}>
+          <span style={{ fontFamily: "Georgia, 'Times New Roman', serif", fontStyle: "italic", fontSize: 12, color: GOLD, letterSpacing: "0.2em", textTransform: "uppercase", display: "block", marginBottom: "0.75rem" }}>Chronology</span>
+          <h2 style={{ fontSize: "clamp(1.8rem, 4vw, 2.8rem)", fontWeight: 700, letterSpacing: "-0.01em", fontFamily: "Georgia, 'Times New Roman', serif", color: "#f0e8d0" }}>Research &amp; Professional Timeline</h2>
         </div>
-        <div>
-          <ExpItem
-            company="Bajaj Engineering Skills Training"
-            role="Graduate Trainee Engineer"
-            period="Nov 2025 – Present"
-            desc="Conducted multi-physics simulations and structural validations for hydraulic circuits in SolidWorks, achieving alignment within ±5% of theoretical values. Researched and benchmarked deep learning models (LSTM vs Random Forest) for predicting component degradation using scientific ML principles, achieving 92% model accuracy. Developed numerical and algorithmic pipelines to automate engineering data analysis."
-            delay={0}
-          />
-          <ExpItem
-            company="Intrainz Innovation Pvt. Ltd."
-            role="CAE &amp; Simulation Intern"
-            period="May 2023 – Jul 2023"
-            desc="Developed kinematic and dynamic models for multi-DOF mechanical components, validating mechanical stress and structural compliance through CAE simulation. Implemented closed-loop control feedback systems and sensor-fusion algorithms, guiding iterative design improvements across 3 prototype iterations."
-            delay={0.15}
-          />
+
+        <div style={{ position: "relative", paddingLeft: "2.2rem" }}>
+          {/* Timeline Center Axis Line */}
+          <div style={{
+            position: "absolute",
+            left: 7,
+            top: 8,
+            bottom: 8,
+            width: 1.5,
+            background: `linear-gradient(to bottom, rgba(245, 158, 11, 0.45) 0%, rgba(245, 158, 11, 0.08) 100%)`,
+          }} />
+
+          <div style={{ display: "flex", flexDirection: "column", gap: "2.5rem" }}>
+            {TIMELINE_DATA.map((item, idx) => (
+              <TimelineCard key={idx} item={item} idx={idx} />
+            ))}
+          </div>
         </div>
       </section>
 
