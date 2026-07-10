@@ -119,7 +119,7 @@ function Counter({ target }: { target: number }) {
 }
 
 // ── Atom Canvas Background ──
-// ── Aerodynamic Flow Canvas Background (Thermal Convection Spark Simulation) ──
+// ── Aerodynamic Flow Canvas Background (Supersonic Oblique Shockwave Simulation) ──
 function AerodynamicFlowCanvas() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const mouseRef = useRef<{ x: number; y: number; active: boolean }>({ x: 0, y: 0, active: false });
@@ -140,7 +140,7 @@ function AerodynamicFlowCanvas() {
     resize();
     window.addEventListener("resize", resize);
 
-    const particleCount = 140;
+    const particleCount = 130;
     const particles: {
       x: number;
       y: number;
@@ -149,19 +149,19 @@ function AerodynamicFlowCanvas() {
       life: number;
       maxLife: number;
       vy: number;
-      temp: number; // 0 (cold) to 1 (white-hot)
+      isShocked: boolean;
     }[] = [];
 
     for (let i = 0; i < particleCount; i++) {
       particles.push({
         x: Math.random() * window.innerWidth,
         y: Math.random() * window.innerHeight,
-        speed: 2 + Math.random() * 3,
-        size: 1.0 + Math.random() * 1.5,
-        life: Math.random() * 200,
-        maxLife: 150 + Math.random() * 100,
-        vy: (Math.random() - 0.5) * 0.2,
-        temp: 0,
+        speed: 6 + Math.random() * 4, // Supersonic flow speeds are high
+        size: 0.8 + Math.random() * 1.2,
+        life: Math.random() * 120,
+        maxLife: 100 + Math.random() * 50,
+        vy: 0,
+        isShocked: false,
       });
     }
 
@@ -177,8 +177,8 @@ function AerodynamicFlowCanvas() {
     window.addEventListener("mouseleave", handleMouseLeave);
 
     const draw = () => {
-      // Clear canvas with high translucency for spark trails
-      ctx.fillStyle = "rgba(9, 10, 15, 0.12)";
+      // Wind tunnel motion blur trail
+      ctx.fillStyle = "rgba(10, 10, 13, 0.15)";
       ctx.fillRect(0, 0, canvas.width, canvas.height);
       
       time += 1.0;
@@ -186,131 +186,143 @@ function AerodynamicFlowCanvas() {
       const W = canvas.width;
       const H = canvas.height;
 
-      // Hot Cylinder Core (heat-exchanger tube) at center-left
-      const cx = W * 0.25;
+      // Wedge apex coordinates (center-left)
+      const cx = W * 0.2;
       const cy = H * 0.5;
-      const R = 45; // Cylinder radius
+      const wedgeL = 130;
+      const wedgeH = 35; // half-height of base
 
-      // Draw the hot glowing cylinder tube
+      // 1. Calculate Mach Number and Shock Angle
+      let Mach = 2.0;
+      if (mouseRef.current.active) {
+        // Map mouse X to Mach range [1.4, 3.5]
+        Mach = 1.4 + (mouseRef.current.x / W) * 2.1;
+      } else {
+        // Idle oscillation
+        Mach = 2.0 + Math.sin(time * 0.01) * 0.4;
+      }
+
+      // Oblique shock wave angle (beta) approximation
+      // In a real flow, beta depends on Mach and wedge half-angle.
+      // Let's model a realistic beta: beta = arcsin(1/M) + wedgeHalfAngle * 0.5
+      const wedgeAngle = Math.atan2(wedgeH, wedgeL);
+      const beta = Math.asin(1 / Mach) + wedgeAngle * 0.5;
+
+      // 2. Draw Supersonic Wedge
       ctx.save();
-      const cylinderGlow = ctx.createRadialGradient(cx, cy, 0, cx, cy, R + 30);
-      cylinderGlow.addColorStop(0, "rgba(245, 158, 11, 0.28)");
-      cylinderGlow.addColorStop(0.4, "rgba(217, 119, 6, 0.12)");
-      cylinderGlow.addColorStop(1, "rgba(0,0,0,0)");
       ctx.beginPath();
-      ctx.arc(cx, cy, R + 30, 0, Math.PI * 2);
-      ctx.fillStyle = cylinderGlow;
-      ctx.fill();
-
-      // Outer solid metal shell with gold glowing border
-      ctx.beginPath();
-      ctx.arc(cx, cy, R, 0, Math.PI * 2);
-      ctx.fillStyle = "#111217";
+      ctx.moveTo(cx, cy); // Apex
+      ctx.lineTo(cx + wedgeL, cy - wedgeH); // Upper edge
+      ctx.lineTo(cx + wedgeL, cy + wedgeH); // Lower edge
+      ctx.closePath();
+      ctx.fillStyle = "rgba(15, 16, 22, 0.95)";
       ctx.strokeStyle = "rgba(245, 158, 11, 0.4)";
-      ctx.lineWidth = 1.5;
+      ctx.lineWidth = 1.8;
       ctx.fill();
       ctx.stroke();
+
+      // Draw Mach lines / Shock wave fronts extending from the apex
+      const shockLen = W * 0.7;
+      ctx.beginPath();
+      ctx.moveTo(cx, cy);
+      ctx.lineTo(cx + shockLen * Math.cos(beta), cy - shockLen * Math.sin(beta));
+      ctx.moveTo(cx, cy);
+      ctx.lineTo(cx + shockLen * Math.cos(beta), cy + shockLen * Math.sin(beta));
+      ctx.strokeStyle = "rgba(245, 158, 11, 0.22)";
+      ctx.lineWidth = 1;
+      ctx.setLineDash([6, 8]);
+      ctx.stroke();
+      ctx.setLineDash([]); // Reset
       ctx.restore();
 
-      // Update and Draw Sparks
+      // Mach indicator label
+      ctx.font = 'italic 11px "Times New Roman"';
+      ctx.fillStyle = "rgba(245, 158, 11, 0.55)";
+      ctx.fillText(`Supersonic Wind Tunnel — Mach ${Mach.toFixed(2)}`, cx - 30, cy - wedgeH - 25);
+
+      // 3. Update and Draw Streamlines/Sparks
       particles.forEach((p) => {
-        p.x += p.speed;
-        p.y += p.vy;
+        // High horizontal speed
+        let currentVx = p.speed;
+        let currentVy = 0;
+
+        const dx = p.x - cx;
+        const dy = p.y - cy;
+
+        // Check if particle has crossed the oblique shock wave front
+        // Shock front line: y = cy +/- dx * tan(beta)
+        if (dx > 0) {
+          const shockYBound = dx * Math.tan(beta);
+          const isBehindShock = Math.abs(dy) < shockYBound;
+
+          if (isBehindShock) {
+            p.isShocked = true;
+            // Deflect flow parallel to wedge surface
+            if (dy < 0) {
+              // Upper half flow: deflected downward
+              currentVy = currentVx * Math.tan(wedgeAngle);
+            } else {
+              // Lower half flow: deflected upward
+              currentVy = -currentVx * Math.tan(wedgeAngle);
+            }
+
+            // Downstream Expansion Fan / Wake behind wedge base
+            if (dx > wedgeL) {
+              const dxWake = dx - wedgeL;
+              const expansionCoeff = Math.min(1.0, dxWake * 0.005);
+              // Wake expansion and convective mixing
+              currentVy += Math.sin(time * 0.15 + dxWake * 0.03) * 0.6 * expansionCoeff;
+            }
+          } else {
+            p.isShocked = false;
+          }
+        } else {
+          p.isShocked = false;
+        }
+
+        // Apply velocities
+        p.x += currentVx;
+        p.y += currentVy;
         p.life += 1;
 
         // Reset particle if off-screen or dead
-        if (p.x > W || p.life > p.maxLife) {
+        if (p.x > W || p.life > p.maxLife || p.y < 0 || p.y > H) {
           p.x = 0;
           p.y = Math.random() * H;
           p.life = 0;
-          p.speed = 2.2 + Math.random() * 3;
-          p.vy = (Math.random() - 0.5) * 0.25;
-          p.temp = 0;
+          p.speed = 6 + Math.random() * 4;
+          p.isShocked = false;
         }
 
-        // 1. Distance to hot cylinder core
-        const dx = p.x - cx;
-        const dy = p.y - cy;
-        const dist = Math.sqrt(dx * dx + dy * dy);
-        const R_barrier = R + 12;
+        // Density and temperature color coding:
+        // Free stream: calm thin amber-gray
+        // Shock layer: hot bright golden yellow
+        let colorStr = "115, 115, 120"; // Slate gray free stream
+        let alphaVal = Math.min(1, 1 - p.life / p.maxLife) * 0.28;
 
-        if (dist < R_barrier) {
-          const angle = Math.atan2(dy, dx);
-          // Push spark around the cylinder barrier
-          p.x = cx + Math.cos(angle) * R_barrier;
-          p.y = cy + Math.sin(angle) * R_barrier;
-
-          // Absorb heat: temperature snaps to white-hot
-          p.temp = 1.0;
-
-          // Thermal buoyancy: sparks rise upwards as they absorb heat
-          p.vy = -1.2 + (Math.random() - 0.5) * 0.3;
-        }
-
-        // 2. Downstream cooling and convection wake
-        if (dx > 0) {
-          // Slowly cool down temperature
-          p.temp *= 0.985;
-          // Buoyancy slowly stabilizes back to horizontal flow
-          p.vy *= 0.98;
+        if (p.isShocked) {
+          colorStr = "255, 165, 0"; // Shock heated gold
+          alphaVal *= 1.8;
           
-          // Convective turbulence ripples
-          const wakeWave = Math.sin(time * 0.08 - dx * 0.02) * Math.cos(time * 0.03) * 1.5 * Math.exp(-dx * 0.003);
-          p.y += wakeWave;
-        }
-
-        // 3. Mouse Interaction (Acts as secondary heat target attracting sparks)
-        if (mouseRef.current.active) {
-          const mdx = p.x - mouseRef.current.x;
-          const mdy = p.y - mouseRef.current.y;
-          const mdist = Math.sqrt(mdx * mdx + mdy * mdy);
-          if (mdist < 75) {
-            // Heat up slightly
-            p.temp = Math.max(p.temp, 0.4 * (1 - mdist / 75));
-            // Pull upward
-            p.vy -= 0.1;
+          // Close to the wedge body: compression heating makes it white-hot
+          const distToWedge = Math.abs(dy) - (dx < wedgeL ? dx * Math.tan(wedgeAngle) : wedgeH);
+          if (distToWedge < 25 && dx < wedgeL) {
+            colorStr = "255, 225, 120"; // White-hot yellow
+            alphaVal *= 1.3;
           }
         }
 
-        // Color interpolation based on temperature (white-hot -> gold -> amber -> deep red-orange)
-        let colorStr = "120, 110, 115"; // Cold particles are neutral gray/slate
-        let alphaVal = Math.min(1, 1 - p.life / p.maxLife) * 0.35;
-        
-        if (p.temp > 0.75) {
-          colorStr = "255, 252, 230"; // White-hot
-          alphaVal *= 1.8;
-        } else if (p.temp > 0.4) {
-          colorStr = "245, 158, 11"; // Supersonic Gold
-          alphaVal *= 1.4;
-        } else if (p.temp > 0.1) {
-          colorStr = "217, 119, 6"; // Deep Amber
-          alphaVal *= 1.1;
-        } else if (p.temp > 0.02) {
-          colorStr = "180, 83, 9"; // Red-orange
-        } else {
-          colorStr = "100, 105, 115"; // Cool state
-          alphaVal *= 0.55;
-        }
-
-        ctx.save();
         ctx.beginPath();
-        ctx.arc(p.x, p.y, p.size * (1 + p.temp * 0.8), 0, Math.PI * 2);
+        ctx.arc(p.x, p.y, p.size * (p.isShocked ? 1.3 : 1.0), 0, Math.PI * 2);
         ctx.fillStyle = `rgba(${colorStr}, ${alphaVal})`;
-        
-        // Add glowing shadow to hot active sparks
-        if (p.temp > 0.4) {
-          ctx.shadowColor = `rgba(${colorStr}, 0.55)`;
-          ctx.shadowBlur = 5;
-        }
         ctx.fill();
-        ctx.restore();
 
-        // Spark trail
-        if (p.x > 8) {
+        // Stream ribbon tail
+        if (p.x > 15) {
           ctx.beginPath();
-          ctx.moveTo(p.x - p.speed * 1.4, p.y);
+          ctx.moveTo(p.x - currentVx * 1.5, p.y - currentVy * 1.5);
           ctx.lineTo(p.x, p.y);
-          ctx.strokeStyle = `rgba(${colorStr}, ${alphaVal * 0.32})`;
+          ctx.strokeStyle = `rgba(${colorStr}, ${alphaVal * 0.25})`;
           ctx.lineWidth = p.size * 0.5;
           ctx.stroke();
         }
