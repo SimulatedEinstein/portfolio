@@ -1065,7 +1065,7 @@ export default function Portfolio() {
           box-sizing: border-box; 
           margin: 0; 
           padding: 0; 
-          font-family: var(--font-geist-sans), system-ui, -apple-system, sans-serif !important;
+          font-family: "Times New Roman", Times, Georgia, serif !important;
         }
         html { scroll-behavior: smooth; }
 
