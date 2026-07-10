@@ -127,16 +127,20 @@ function Counter({ target }: { target: number }) {
 }
 
 // ── Atom Canvas Background ──
-function AtomCanvas() {
+// ── Aerodynamic Flow Canvas Background ──
+function AerodynamicFlowCanvas() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const mouseRef = useRef<{ x: number; y: number; active: boolean }>({ x: 0, y: 0, active: false });
 
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
+    
     let animId: number;
-
+    let time = 0;
+    
     const resize = () => {
       canvas.width = window.innerWidth;
       canvas.height = window.innerHeight;
@@ -144,105 +148,152 @@ function AtomCanvas() {
     resize();
     window.addEventListener("resize", resize);
 
-    // Warm amber/gold accent instead of cyan
-    const atoms = [
-      { cx: 0.12, cy: 0.22, size: 95, speed: 1.0, color: "212,175,55" },
-      { cx: 0.85, cy: 0.18, size: 72, speed: 1.3, color: "180,140,40" },
-      { cx: 0.72, cy: 0.78, size: 110, speed: 0.7, color: "212,175,55" },
-      { cx: 0.08, cy: 0.82, size: 62, speed: 1.6, color: "230,200,100" },
-      { cx: 0.52, cy: 0.48, size: 52, speed: 1.1, color: "212,175,55" },
-    ];
+    // Flow particles
+    const particleCount = 180;
+    const particles: {
+      x: number;
+      y: number;
+      speed: number;
+      size: number;
+      life: number;
+      maxLife: number;
+      vyOffset: number;
+      colorSeed: number;
+    }[] = [];
 
-    let t = 0;
-
-    const drawAtom = (cx: number, cy: number, size: number, t: number, speed: number, colorStr: string, alpha: number) => {
-      const W = canvas.width;
-      const H = canvas.height;
-      const x = cx * W;
-      const y = cy * H;
-      const r = size;
-
-      ctx.beginPath();
-      ctx.arc(x, y, r * 0.10, 0, Math.PI * 2);
-      ctx.fillStyle = `rgba(${colorStr},${alpha * 0.9})`;
-      ctx.fill();
-
-      const nucGlow = ctx.createRadialGradient(x, y, 0, x, y, r * 0.25);
-      nucGlow.addColorStop(0, `rgba(${colorStr},${alpha * 0.4})`);
-      nucGlow.addColorStop(1, `rgba(${colorStr},0)`);
-      ctx.beginPath();
-      ctx.arc(x, y, r * 0.25, 0, Math.PI * 2);
-      ctx.fillStyle = nucGlow;
-      ctx.fill();
-
-      for (let p = 0; p < 3; p++) {
-        const pa = (p / 3) * Math.PI * 2 + t * speed * 0.5;
-        const px = x + Math.cos(pa) * r * 0.06;
-        const py = y + Math.sin(pa) * r * 0.06;
-        ctx.beginPath();
-        ctx.arc(px, py, r * 0.04, 0, Math.PI * 2);
-        ctx.fillStyle = `rgba(255,180,80,${alpha * 0.9})`;
-        ctx.fill();
-      }
-
-      const orbits = [
-        { rx: r, ry: r * 0.35, tilt: 0, electronSpeed: 1.0, electronOffset: 0 },
-        { rx: r, ry: r * 0.35, tilt: Math.PI / 3, electronSpeed: 0.8, electronOffset: 2.1 },
-        { rx: r, ry: r * 0.35, tilt: -Math.PI / 3, electronSpeed: 1.2, electronOffset: 4.2 },
-      ];
-
-      orbits.forEach((orb) => {
-        ctx.save();
-        ctx.translate(x, y);
-        ctx.rotate(orb.tilt);
-        ctx.beginPath();
-        ctx.ellipse(0, 0, orb.rx, orb.ry, 0, 0, Math.PI * 2);
-        ctx.strokeStyle = `rgba(${colorStr},${alpha * 0.2})`;
-        ctx.lineWidth = 0.8;
-        ctx.stroke();
-
-        const angle = t * speed * orb.electronSpeed + orb.electronOffset;
-        const ex = orb.rx * Math.cos(angle);
-        const ey = orb.ry * Math.sin(angle);
-
-        for (let trail = 1; trail <= 6; trail++) {
-          const ta = t * speed * orb.electronSpeed + orb.electronOffset - trail * 0.08;
-          const tex = orb.rx * Math.cos(ta);
-          const tey = orb.ry * Math.sin(ta);
-          ctx.beginPath();
-          ctx.arc(tex, tey, r * 0.04 * (1 - trail / 7), 0, Math.PI * 2);
-          ctx.fillStyle = `rgba(${colorStr},${alpha * 0.3 * (1 - trail / 7)})`;
-          ctx.fill();
-        }
-
-        ctx.beginPath();
-        ctx.arc(ex, ey, r * 0.07, 0, Math.PI * 2);
-        ctx.fillStyle = `rgba(${colorStr},${alpha * 1.0})`;
-        ctx.fill();
-
-        const eGlow = ctx.createRadialGradient(ex, ey, 0, ex, ey, r * 0.18);
-        eGlow.addColorStop(0, `rgba(${colorStr},${alpha * 0.5})`);
-        eGlow.addColorStop(1, `rgba(${colorStr},0)`);
-        ctx.beginPath();
-        ctx.arc(ex, ey, r * 0.18, 0, Math.PI * 2);
-        ctx.fillStyle = eGlow;
-        ctx.fill();
-
-        ctx.restore();
+    for (let i = 0; i < particleCount; i++) {
+      particles.push({
+        x: Math.random() * window.innerWidth,
+        y: Math.random() * window.innerHeight,
+        speed: 2.5 + Math.random() * 2.5,
+        size: 0.8 + Math.random() * 1.2,
+        life: Math.random() * 200,
+        maxLife: 200 + Math.random() * 100,
+        vyOffset: (Math.random() - 0.5) * 0.2,
+        colorSeed: Math.random(),
       });
+    }
+
+    const handleMouseMove = (e: MouseEvent) => {
+      mouseRef.current = { x: e.clientX, y: e.clientY, active: true };
     };
+
+    const handleMouseLeave = () => {
+      mouseRef.current.active = false;
+    };
+
+    window.addEventListener("mousemove", handleMouseMove);
+    window.addEventListener("mouseleave", handleMouseLeave);
 
     const draw = () => {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      t += 0.012;
-      atoms.forEach((a) => drawAtom(a.cx, a.cy, a.size, t, a.speed, a.color, 0.15));
+      // Create motion blur trail
+      ctx.fillStyle = "rgba(4, 2, 10, 0.08)";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      
+      time += 1.0;
+      
+      const W = canvas.width;
+      const H = canvas.height;
+
+      // Obstacle position (default to a point in the center-left if mouse not active)
+      const obstacle = mouseRef.current.active 
+        ? mouseRef.current 
+        : { x: W * 0.25, y: H * 0.5 };
+      const R = 60; // obstacle radius of influence
+      
+      // Draw the virtual obstacle (cylinder shape) with a glowing ring
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(obstacle.x, obstacle.y, R * 0.35, 0, Math.PI * 2);
+      ctx.fillStyle = "rgba(0, 240, 255, 0.04)";
+      ctx.strokeStyle = "rgba(0, 240, 255, 0.2)";
+      ctx.lineWidth = 1;
+      ctx.shadowColor = "#00f0ff";
+      ctx.shadowBlur = 8;
+      ctx.fill();
+      ctx.stroke();
+      ctx.restore();
+
+      // Render flow particles
+      particles.forEach((p) => {
+        p.x += p.speed;
+        p.y += p.vyOffset;
+        p.life += 1;
+
+        // Reset particle if off screen or dead
+        if (p.x > W || p.life > p.maxLife) {
+          p.x = 0;
+          p.y = Math.random() * H;
+          p.life = 0;
+          p.speed = 2.5 + Math.random() * 2.5;
+        }
+
+        // Distance to obstacle
+        const dx = p.x - obstacle.x;
+        const dy = p.y - obstacle.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+
+        let localVy = 0;
+
+        // Flow diversion around the obstacle
+        if (dist < R) {
+          const angle = Math.atan2(dy, dx);
+          p.x = obstacle.x + Math.cos(angle) * R;
+          p.y = obstacle.y + Math.sin(angle) * R;
+          const pushForce = (R - dist) / R;
+          localVy = Math.sin(angle) * p.speed * 0.8 * pushForce;
+        }
+
+        // Von Karman Vortex Street wave generation downstream of obstacle
+        if (dx > 0 && dx < W * 0.65) {
+          const decay = Math.exp(-dx * 0.0016);
+          const startup = 1 - Math.exp(-dx * 0.03);
+          const shedWave = Math.sin(time * 0.08 - dx * 0.015) * Math.cos(time * 0.02 + p.colorSeed * 0.1);
+          const amplitude = 3.5 * decay * startup;
+          p.y += shedWave * amplitude;
+        }
+
+        p.y += localVy;
+
+        // Color based on position/wake
+        let colorStr = "0, 240, 255"; // Cyan
+        if (dx > 0 && dx < W * 0.4) {
+          const blend = dx / (W * 0.4);
+          const r = Math.round(0 * (1 - blend) + 168 * blend);
+          const g = Math.round(240 * (1 - blend) + 85 * blend);
+          const b = Math.round(255 * (1 - blend) + 247 * blend);
+          colorStr = `${r}, ${g}, ${b}`;
+        } else if (p.colorSeed > 0.6) {
+          colorStr = "168, 85, 247"; // Violet
+        }
+        
+        const alpha = Math.min(1, 1 - p.life / p.maxLife) * (p.speed / 5) * 0.45;
+        
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(${colorStr}, ${alpha})`;
+        ctx.fill();
+        
+        if (p.x > 8) {
+          ctx.beginPath();
+          ctx.moveTo(p.x - p.speed * 1.5, p.y);
+          ctx.lineTo(p.x, p.y);
+          ctx.strokeStyle = `rgba(${colorStr}, ${alpha * 0.3})`;
+          ctx.lineWidth = p.size * 0.6;
+          ctx.stroke();
+        }
+      });
+
       animId = requestAnimationFrame(draw);
     };
+
     draw();
 
     return () => {
       cancelAnimationFrame(animId);
       window.removeEventListener("resize", resize);
+      window.removeEventListener("mousemove", handleMouseMove);
+      window.removeEventListener("mouseleave", handleMouseLeave);
     };
   }, []);
 
@@ -301,8 +352,11 @@ function ProjectCard({ project, delay }: { project: Project; delay: number }) {
   );
 }
 
-const GOLD = "#d4af37";
-const GOLD_DIM = "rgba(212,175,55,0.22)";
+const CYAN = "#00f0ff";
+const CYAN_DIM = "rgba(0, 240, 255, 0.18)";
+const VIOLET = "#a855f7";
+const GOLD = CYAN;
+const GOLD_DIM = CYAN_DIM;
 
 // ── Experience Item ──
 function ExpItem({ company, role, period, desc, delay }: { company: string; role: string; period: string; desc: string; delay: number }) {
@@ -973,26 +1027,82 @@ export default function Portfolio() {
   }, []);
 
   return (
-    <div style={{ background: "#080604", color: "#e8dfc8", fontFamily: "Georgia, 'Times New Roman', serif", overflowX: "hidden", minHeight: "100vh" }}>
+    <div style={{ background: "#04020a", color: "#e3e3f0", overflowX: "hidden", minHeight: "100vh" }}>
 
       <style>{`
-        * { box-sizing: border-box; margin: 0; padding: 0; }
+        * { 
+          box-sizing: border-box; 
+          margin: 0; 
+          padding: 0; 
+          font-family: var(--font-geist-sans), system-ui, -apple-system, sans-serif !important;
+        }
         html { scroll-behavior: smooth; }
-        .project-card:hover { border-color: rgba(212,175,55,0.28) !important; }
+
+        /* Modernized aerospace gradient headers */
+        .gradient-title {
+          background: linear-gradient(135deg, #00f0ff 0%, #a855f7 100%) !important;
+          -webkit-background-clip: text !important;
+          background-clip: text !important;
+          -webkit-text-fill-color: transparent !important;
+          color: transparent !important;
+        }
+
+        /* Glassmorphic card styling overrides */
+        .project-card, #skills > div > div, #pinn-simulator > div > div {
+          background: rgba(10, 8, 20, 0.72) !important;
+          border: 0.5px solid rgba(0, 240, 255, 0.15) !important;
+          backdrop-filter: blur(12px) !important;
+          border-radius: 6px !important;
+        }
+        
+        .project-card:hover {
+          border-color: #00f0ff !important;
+          box-shadow: 0 0 25px rgba(0, 240, 255, 0.25) !important;
+        }
+
+        /* Custom scrollbar matching styling */
+        ::-webkit-scrollbar {
+          width: 8px;
+        }
+        ::-webkit-scrollbar-track {
+          background: #04020a;
+        }
+        ::-webkit-scrollbar-thumb {
+          background: rgba(0, 240, 255, 0.2);
+          border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+          background: rgba(0, 240, 255, 0.4);
+        }
+
+        /* Simulator SVG tweaks */
+        #pinn-simulator svg path {
+          stroke: rgba(0, 240, 255, 0.15) !important;
+        }
+        #pinn-simulator svg path[style*="animation"] {
+          stroke: #00f0ff !important;
+        }
+        #pinn-simulator svg circle {
+          stroke: rgba(0, 240, 255, 0.4) !important;
+        }
+        #pinn-simulator svg circle[stroke="#d4af37"] {
+          stroke: #00f0ff !important;
+        }
+
         @keyframes pulse-line { 0%,100% { opacity:0.3; } 50% { opacity:1; } }
         @keyframes dash { to { stroke-dashoffset: -20; } }
       `}</style>
 
-      <AtomCanvas />
+      <AerodynamicFlowCanvas />
 
       {/* ── NAV ── */}
       <nav style={{
         position: "fixed", top: 0, left: 0, right: 0, zIndex: 100,
         display: "flex", alignItems: "center", justifyContent: "space-between",
         padding: "1rem 2.5rem",
-        background: scrolled ? "rgba(8,6,4,0.92)" : "rgba(8,6,4,0.55)",
+        background: scrolled ? "rgba(5, 3, 10, 0.85)" : "rgba(5, 3, 10, 0.45)",
         backdropFilter: "blur(14px)",
-        borderBottom: `0.5px solid rgba(212,175,55,0.1)`,
+        borderBottom: `0.5px solid rgba(0, 240, 255, 0.1)`,
         transition: "background 0.3s",
       }}>
         <span style={{ fontFamily: "Georgia, 'Times New Roman', serif", fontStyle: "italic", color: GOLD, fontSize: 15, letterSpacing: "0.05em" }}>O. Kidilay</span>
@@ -1018,7 +1128,8 @@ export default function Portfolio() {
         </motion.p>
 
         <motion.h1 initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.5, duration: 0.7 }}
-          style={{ fontSize: "clamp(3rem, 9vw, 7rem)", fontWeight: 400, lineHeight: 1.05, letterSpacing: "-0.02em", marginBottom: "1.5rem", fontFamily: "Georgia, 'Times New Roman', serif", color: "#f0e8d0" }}>
+          className="gradient-title"
+          style={{ fontSize: "clamp(3.5rem, 9vw, 7.5rem)", fontWeight: 800, lineHeight: 1.05, letterSpacing: "-0.02em", marginBottom: "1.5rem" }}>
           Ojas Kidilay<br />
         </motion.h1>
 
