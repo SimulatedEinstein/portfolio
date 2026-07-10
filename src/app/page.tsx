@@ -127,7 +127,7 @@ function Counter({ target }: { target: number }) {
 }
 
 // ── Atom Canvas Background ──
-// ── Aerodynamic Flow Canvas Background (Airfoil Wind-Tunnel Simulation) ──
+// ── Aerodynamic Flow Canvas Background (Thermal Convection Spark Simulation) ──
 function AerodynamicFlowCanvas() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const mouseRef = useRef<{ x: number; y: number; active: boolean }>({ x: 0, y: 0, active: false });
@@ -148,7 +148,7 @@ function AerodynamicFlowCanvas() {
     resize();
     window.addEventListener("resize", resize);
 
-    const particleCount = 120;
+    const particleCount = 140;
     const particles: {
       x: number;
       y: number;
@@ -156,18 +156,20 @@ function AerodynamicFlowCanvas() {
       size: number;
       life: number;
       maxLife: number;
-      yOffset: number;
+      vy: number;
+      temp: number; // 0 (cold) to 1 (white-hot)
     }[] = [];
 
     for (let i = 0; i < particleCount; i++) {
       particles.push({
         x: Math.random() * window.innerWidth,
         y: Math.random() * window.innerHeight,
-        speed: 3 + Math.random() * 3,
-        size: 0.8 + Math.random() * 1.0,
+        speed: 2 + Math.random() * 3,
+        size: 1.0 + Math.random() * 1.5,
         life: Math.random() * 200,
-        maxLife: 200 + Math.random() * 100,
-        yOffset: (Math.random() - 0.5) * 10, // vertical band spreading
+        maxLife: 150 + Math.random() * 100,
+        vy: (Math.random() - 0.5) * 0.2,
+        temp: 0,
       });
     }
 
@@ -182,23 +184,9 @@ function AerodynamicFlowCanvas() {
     window.addEventListener("mousemove", handleMouseMove);
     window.addEventListener("mouseleave", handleMouseLeave);
 
-    // Mathematical NACA 0012 Airfoil Profile half-thickness helper
-    const getAirfoilThickness = (xNorm: number, chord: number) => {
-      if (xNorm < 0 || xNorm > 1) return 0;
-      // NACA 0012 thickness distribution coefficient (tau = 0.12)
-      const yt = 0.6 * (
-        0.2969 * Math.sqrt(xNorm) - 
-        0.1260 * xNorm - 
-        0.3516 * xNorm * xNorm + 
-        0.2843 * Math.pow(xNorm, 3) - 
-        0.1015 * Math.pow(xNorm, 4)
-      );
-      return yt * chord;
-    };
-
     const draw = () => {
-      // Wind tunnel motion blur clear
-      ctx.fillStyle = "rgba(11, 15, 25, 0.12)";
+      // Clear canvas with high translucency for spark trails
+      ctx.fillStyle = "rgba(9, 10, 15, 0.12)";
       ctx.fillRect(0, 0, canvas.width, canvas.height);
       
       time += 1.0;
@@ -206,147 +194,132 @@ function AerodynamicFlowCanvas() {
       const W = canvas.width;
       const H = canvas.height;
 
-      // Airfoil Location: center-left
+      // Hot Cylinder Core (heat-exchanger tube) at center-left
       const cx = W * 0.25;
       const cy = H * 0.5;
-      const chord = 160; // wing size
+      const R = 45; // Cylinder radius
 
-      // Calculate angle of attack (alpha) based on mouse vertical position
-      // Mouse high -> positive angle of attack, Mouse low -> negative angle of attack
-      let alpha = 0.05; // default angle of attack
-      if (mouseRef.current.active) {
-        const dyMouse = mouseRef.current.y - cy;
-        // Limit angle of attack to [-20, 20] degrees
-        alpha = Math.max(-0.35, Math.min(0.35, dyMouse / (H * 0.4)));
-      } else {
-        // Subtle idle oscillation of angle of attack
-        alpha = Math.sin(time * 0.015) * 0.12;
-      }
-
-      // 1. Draw virtual wing profile (NACA 0012 Airfoil)
+      // Draw the hot glowing cylinder tube
       ctx.save();
-      ctx.translate(cx, cy);
-      ctx.rotate(alpha);
-      
+      const cylinderGlow = ctx.createRadialGradient(cx, cy, 0, cx, cy, R + 30);
+      cylinderGlow.addColorStop(0, "rgba(245, 158, 11, 0.28)");
+      cylinderGlow.addColorStop(0.4, "rgba(217, 119, 6, 0.12)");
+      cylinderGlow.addColorStop(1, "rgba(0,0,0,0)");
       ctx.beginPath();
-      const segments = 45;
-      // Upper surface
-      for (let i = 0; i <= segments; i++) {
-        const xNorm = i / segments;
-        const yt = getAirfoilThickness(xNorm, chord);
-        ctx.lineTo(xNorm * chord, -yt);
-      }
-      // Lower surface
-      for (let i = segments; i >= 0; i--) {
-        const xNorm = i / segments;
-        const yt = getAirfoilThickness(xNorm, chord);
-        ctx.lineTo(xNorm * chord, yt);
-      }
-      ctx.closePath();
-      ctx.fillStyle = "rgba(15, 23, 42, 0.9)";
-      ctx.strokeStyle = "rgba(0, 245, 160, 0.4)";
-      ctx.lineWidth = 1.8;
+      ctx.arc(cx, cy, R + 30, 0, Math.PI * 2);
+      ctx.fillStyle = cylinderGlow;
+      ctx.fill();
+
+      // Outer solid metal shell with gold glowing border
+      ctx.beginPath();
+      ctx.arc(cx, cy, R, 0, Math.PI * 2);
+      ctx.fillStyle = "#111217";
+      ctx.strokeStyle = "rgba(245, 158, 11, 0.4)";
+      ctx.lineWidth = 1.5;
       ctx.fill();
       ctx.stroke();
       ctx.restore();
 
-      // 2. Render and update streamlines
+      // Update and Draw Sparks
       particles.forEach((p) => {
         p.x += p.speed;
+        p.y += p.vy;
         p.life += 1;
 
+        // Reset particle if off-screen or dead
         if (p.x > W || p.life > p.maxLife) {
           p.x = 0;
           p.y = Math.random() * H;
           p.life = 0;
-          p.speed = 3.5 + Math.random() * 3.5;
+          p.speed = 2.2 + Math.random() * 3;
+          p.vy = (Math.random() - 0.5) * 0.25;
+          p.temp = 0;
         }
 
-        // Relative coordinates to wing center
+        // 1. Distance to hot cylinder core
         const dx = p.x - cx;
         const dy = p.y - cy;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        const R_barrier = R + 12;
 
-        // Rotate into airfoil coordinate system (aligned with chord line)
-        const cosA = Math.cos(-alpha);
-        const sinA = Math.sin(-alpha);
-        const xr = dx * cosA - dy * sinA;
-        const yr = dx * sinA + dy * cosA;
+        if (dist < R_barrier) {
+          const angle = Math.atan2(dy, dx);
+          // Push spark around the cylinder barrier
+          p.x = cx + Math.cos(angle) * R_barrier;
+          p.y = cy + Math.sin(angle) * R_barrier;
 
-        let finalX = p.x;
-        let finalY = p.y;
-        let speedMult = 1.0;
+          // Absorb heat: temperature snaps to white-hot
+          p.temp = 1.0;
 
-        // Flow deflection over airfoil chord range
-        if (xr >= 0 && xr <= chord) {
-          const xNorm = xr / chord;
-          const thickness = getAirfoilThickness(xNorm, chord);
+          // Thermal buoyancy: sparks rise upwards as they absorb heat
+          p.vy = -1.2 + (Math.random() - 0.5) * 0.3;
+        }
 
-          // Deflect based on whether the streamline is on upper or lower surface
-          const influenceRange = 55; // vertical range of deflection
-          if (yr < 0 && yr > -influenceRange) {
-            // Upper surface flow: deflected upwards
-            const ratio = (influenceRange + yr) / influenceRange; // 1 at surface, 0 at outer bound
-            const deflection = thickness * ratio;
-            const yrDeflected = yr - deflection;
-            
-            // Re-rotate back to global frame
-            finalX = cx + xr * Math.cos(alpha) - yrDeflected * Math.sin(alpha);
-            finalY = cy + xr * Math.sin(alpha) + yrDeflected * Math.cos(alpha);
-            
-            // Bernoulli effect: flow accelerates over top of wing
-            speedMult = 1.0 + 0.35 * (thickness / chord) * ratio;
-          } else if (yr >= 0 && yr < influenceRange) {
-            // Lower surface flow: deflected downwards
-            const ratio = (influenceRange - yr) / influenceRange;
-            const deflection = thickness * ratio;
-            const yrDeflected = yr + deflection;
-            
-            finalX = cx + xr * Math.cos(alpha) - yrDeflected * Math.sin(alpha);
-            finalY = cy + xr * Math.sin(alpha) + yrDeflected * Math.cos(alpha);
-            
-            // Flow decelerates slightly under the wing for positive lift
-            speedMult = 1.0 - 0.1 * (thickness / chord) * ratio;
+        // 2. Downstream cooling and convection wake
+        if (dx > 0) {
+          // Slowly cool down temperature
+          p.temp *= 0.985;
+          // Buoyancy slowly stabilizes back to horizontal flow
+          p.vy *= 0.98;
+          
+          // Convective turbulence ripples
+          const wakeWave = Math.sin(time * 0.08 - dx * 0.02) * Math.cos(time * 0.03) * 1.5 * Math.exp(-dx * 0.003);
+          p.y += wakeWave;
+        }
+
+        // 3. Mouse Interaction (Acts as secondary heat target attracting sparks)
+        if (mouseRef.current.active) {
+          const mdx = p.x - mouseRef.current.x;
+          const mdy = p.y - mouseRef.current.y;
+          const mdist = Math.sqrt(mdx * mdx + mdy * mdy);
+          if (mdist < 75) {
+            // Heat up slightly
+            p.temp = Math.max(p.temp, 0.4 * (1 - mdist / 75));
+            // Pull upward
+            p.vy -= 0.1;
           }
         }
 
-        // Downstream wake turbulence behind the wing
-        if (xr > chord && xr < chord + W * 0.4) {
-          const dxWake = xr - chord;
-          const decay = Math.exp(-dxWake * 0.002);
-          const turbulence = Math.sin(time * 0.12 - dxWake * 0.02) * Math.cos(time * 0.03) * 3 * decay;
-          
-          // Deflect wake center based on Angle of Attack
-          const wakeCenterY = dxWake * Math.sin(alpha);
-          finalY += wakeCenterY + turbulence;
-        }
-
-        // Scale horizontal particle speed based on Bernoulli multiplier
-        p.x += (p.speed * (speedMult - 1.0));
-
-        // Styling stream lines: cyan-mint where flow accelerates, teal elsewhere
-        let colorStr = "0, 245, 160"; // Mint
-        if (speedMult > 1.08) {
-          colorStr = "0, 245, 210"; // White-hot mint/cyan
-        } else if (speedMult < 1.0) {
-          colorStr = "15, 118, 110"; // Deep Teal
+        // Color interpolation based on temperature (white-hot -> gold -> amber -> deep red-orange)
+        let colorStr = "120, 110, 115"; // Cold particles are neutral gray/slate
+        let alphaVal = Math.min(1, 1 - p.life / p.maxLife) * 0.35;
+        
+        if (p.temp > 0.75) {
+          colorStr = "255, 252, 230"; // White-hot
+          alphaVal *= 1.8;
+        } else if (p.temp > 0.4) {
+          colorStr = "245, 158, 11"; // Supersonic Gold
+          alphaVal *= 1.4;
+        } else if (p.temp > 0.1) {
+          colorStr = "217, 119, 6"; // Deep Amber
+          alphaVal *= 1.1;
+        } else if (p.temp > 0.02) {
+          colorStr = "180, 83, 9"; // Red-orange
         } else {
-          colorStr = "20, 184, 166"; // Standard Teal
+          colorStr = "100, 105, 115"; // Cool state
+          alphaVal *= 0.55;
         }
 
-        const alphaVal = Math.min(1, 1 - p.life / p.maxLife) * 0.4;
-
+        ctx.save();
         ctx.beginPath();
-        ctx.arc(finalX, finalY, p.size, 0, Math.PI * 2);
+        ctx.arc(p.x, p.y, p.size * (1 + p.temp * 0.8), 0, Math.PI * 2);
         ctx.fillStyle = `rgba(${colorStr}, ${alphaVal})`;
+        
+        // Add glowing shadow to hot active sparks
+        if (p.temp > 0.4) {
+          ctx.shadowColor = `rgba(${colorStr}, 0.55)`;
+          ctx.shadowBlur = 5;
+        }
         ctx.fill();
+        ctx.restore();
 
-        // Particle trail ribbons
-        if (finalX > 10) {
+        // Spark trail
+        if (p.x > 8) {
           ctx.beginPath();
-          ctx.moveTo(finalX - p.speed * 1.8 * speedMult, finalY);
-          ctx.lineTo(finalX, finalY);
-          ctx.strokeStyle = `rgba(${colorStr}, ${alphaVal * 0.3})`;
-          ctx.lineWidth = p.size * 0.6;
+          ctx.moveTo(p.x - p.speed * 1.4, p.y);
+          ctx.lineTo(p.x, p.y);
+          ctx.strokeStyle = `rgba(${colorStr}, ${alphaVal * 0.32})`;
+          ctx.lineWidth = p.size * 0.5;
           ctx.stroke();
         }
       });
@@ -419,10 +392,10 @@ function ProjectCard({ project, delay }: { project: Project; delay: number }) {
   );
 }
 
-const AERO_MINT = "#00f5a0";
-const MINT_DIM = "rgba(0, 245, 160, 0.15)";
-const GOLD = AERO_MINT;
-const GOLD_DIM = MINT_DIM;
+const GOLD_ACCENT = "#f59e0b";
+const GOLD_DIM_ACCENT = "rgba(245, 158, 11, 0.15)";
+const GOLD = GOLD_ACCENT;
+const GOLD_DIM = GOLD_DIM_ACCENT;
 
 // ── Experience Item ──
 function ExpItem({ company, role, period, desc, delay }: { company: string; role: string; period: string; desc: string; delay: number }) {
@@ -1093,7 +1066,7 @@ export default function Portfolio() {
   }, []);
 
   return (
-    <div style={{ background: "#0f1319", color: "#cbd5e1", overflowX: "hidden", minHeight: "100vh" }}>
+    <div style={{ background: "#0a0a0d", color: "#f4f4f5", overflowX: "hidden", minHeight: "100vh" }}>
 
       <style>{`
         * { 
@@ -1104,26 +1077,32 @@ export default function Portfolio() {
         }
         html { scroll-behavior: smooth; }
 
-        /* Modernized wind-tunnel mint gradient headers */
+        /* Background grid pattern */
+        body {
+          background-image: radial-gradient(rgba(245, 158, 11, 0.05) 1px, transparent 1px);
+          background-size: 24px 24px;
+        }
+
+        /* Modernized wind-tunnel gold gradient headers */
         .gradient-title {
-          background: linear-gradient(135deg, #00f5a0 0%, #00d2ff 100%) !important;
+          background: linear-gradient(135deg, #ffb03a 0%, #d97706 100%) !important;
           -webkit-background-clip: text !important;
           background-clip: text !important;
           -webkit-text-fill-color: transparent !important;
           color: transparent !important;
         }
 
-        /* Glassmorphic card styling overrides for matte slate/mint theme */
+        /* Glassmorphic card styling overrides for carbon/gold theme */
         .project-card, #skills > div > div, #pinn-simulator > div > div {
-          background: rgba(15, 23, 42, 0.75) !important;
-          border: 0.5px solid rgba(0, 245, 160, 0.15) !important;
+          background: rgba(18, 19, 24, 0.76) !important;
+          border: 0.5px solid rgba(245, 158, 11, 0.15) !important;
           backdrop-filter: blur(12px) !important;
           border-radius: 6px !important;
         }
         
         .project-card:hover {
-          border-color: #00f5a0 !important;
-          box-shadow: 0 0 25px rgba(0, 245, 160, 0.22) !important;
+          border-color: #f59e0b !important;
+          box-shadow: 0 0 25px rgba(245, 158, 11, 0.22) !important;
         }
 
         /* Custom scrollbar matching styling */
@@ -1131,49 +1110,49 @@ export default function Portfolio() {
           width: 8px;
         }
         ::-webkit-scrollbar-track {
-          background: #0f1319;
+          background: #0a0a0d;
         }
         ::-webkit-scrollbar-thumb {
-          background: rgba(0, 245, 160, 0.2);
+          background: rgba(245, 158, 11, 0.2);
           border-radius: 4px;
         }
         ::-webkit-scrollbar-thumb:hover {
-          background: rgba(0, 245, 160, 0.4);
+          background: rgba(245, 158, 11, 0.4);
         }
 
-        /* Simulator SVG tweaks mapping to Mint */
+        /* Simulator SVG tweaks mapping to Gold */
         #pinn-simulator svg path {
-          stroke: rgba(0, 245, 160, 0.15) !important;
+          stroke: rgba(245, 158, 11, 0.15) !important;
         }
         #pinn-simulator svg path[style*="animation"] {
-          stroke: #00f5a0 !important;
+          stroke: #f59e0b !important;
         }
         #pinn-simulator svg circle {
-          stroke: rgba(0, 245, 160, 0.35) !important;
+          stroke: rgba(245, 158, 11, 0.35) !important;
         }
         #pinn-simulator svg circle[stroke="#d4af37"] {
-          stroke: #00f5a0 !important;
+          stroke: #f59e0b !important;
         }
 
         /* Project card and CV tags overrides */
         .project-card span {
-          background: rgba(0, 245, 160, 0.05) !important;
-          border: 0.5px solid rgba(0, 245, 160, 0.22) !important;
-          color: #00f5a0 !important;
+          background: rgba(245, 158, 11, 0.05) !important;
+          border: 0.5px solid rgba(245, 158, 11, 0.22) !important;
+          color: #f59e0b !important;
         }
         #resume span {
-          background: rgba(0, 245, 160, 0.05) !important;
-          border: 0.5px solid rgba(0, 245, 160, 0.18) !important;
-          color: #00f5a0 !important;
+          background: rgba(245, 158, 11, 0.05) !important;
+          border: 0.5px solid rgba(245, 158, 11, 0.18) !important;
+          color: #f59e0b !important;
         }
         #resume a {
-          background: rgba(0, 245, 160, 0.04) !important;
-          border-color: rgba(0, 245, 160, 0.2) !important;
-          color: #00f5a0 !important;
+          background: rgba(245, 158, 11, 0.04) !important;
+          border-color: rgba(245, 158, 11, 0.2) !important;
+          color: #f59e0b !important;
         }
         #resume a:hover {
-          background: rgba(0, 245, 160, 0.1) !important;
-          border-color: rgba(0, 245, 160, 0.4) !important;
+          background: rgba(245, 158, 11, 0.1) !important;
+          border-color: rgba(245, 158, 11, 0.4) !important;
         }
 
         @keyframes pulse-line { 0%,100% { opacity:0.3; } 50% { opacity:1; } }
@@ -1187,9 +1166,9 @@ export default function Portfolio() {
         position: "fixed", top: 0, left: 0, right: 0, zIndex: 100,
         display: "flex", alignItems: "center", justifyContent: "space-between",
         padding: "1rem 2.5rem",
-        background: scrolled ? "rgba(15, 23, 42, 0.88)" : "rgba(15, 23, 42, 0.48)",
+        background: scrolled ? "rgba(18, 19, 24, 0.88)" : "rgba(18, 19, 24, 0.48)",
         backdropFilter: "blur(14px)",
-        borderBottom: `0.5px solid rgba(0, 245, 160, 0.12)`,
+        borderBottom: `0.5px solid rgba(245, 158, 11, 0.12)`,
         transition: "background 0.3s",
       }}>
         <span style={{ fontFamily: "Georgia, 'Times New Roman', serif", fontStyle: "italic", color: GOLD, fontSize: 15, letterSpacing: "0.05em" }}>O. Kidilay</span>
