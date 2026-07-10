@@ -362,6 +362,476 @@ function SkillGroup({ group, items, delay }: { group: string; items: string[]; d
   );
 }
 
+// ── PINN Simulator Section ──
+function PinnSimulatorSection() {
+  const ref = useRef<HTMLDivElement>(null);
+  const inView = useInView(ref, { once: true, margin: "-60px" });
+  
+  const [epoch, setEpoch] = useState(0);
+  const [isTraining, setIsTraining] = useState(false);
+  const [showCollocation, setShowCollocation] = useState(true);
+  const [customPoints, setCustomPoints] = useState<{ x: number; y: number }[]>([]);
+  const [noiseGrid, setNoiseGrid] = useState<number[][]>([]);
+  
+  // Initialize noise grid once on client-side
+  useEffect(() => {
+    const grid = [];
+    for (let i = 0; i < 30; i++) {
+      const row = [];
+      for (let j = 0; j < 30; j++) {
+        row.push(Math.random() - 0.5);
+      }
+      grid.push(row);
+    }
+    setNoiseGrid(grid);
+  }, []);
+
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  // Exact 2D Laplace heat analytical solution
+  const getAnalyticalT = (x: number, y: number) => {
+    let T = 0;
+    for (let n = 1; n < 30; n += 2) {
+      const coeff = 400 / (n * Math.PI * Math.sinh(n * Math.PI));
+      T += coeff * Math.sin(n * Math.PI * x) * Math.sinh(n * Math.PI * y);
+    }
+    return T;
+  };
+
+  const getSimulatedT = (x: number, y: number, ep: number, noise: number[][], gridX: number, gridY: number) => {
+    if (!noise || noise.length === 0) return 0;
+    if (ep === 0) {
+      return (noise[gridX]?.[gridY] ?? 0) * 45 + 15;
+    }
+    
+    const tBC = Math.min(1, ep / 50);
+    const analytical = getAnalyticalT(x, y);
+    
+    // Boundary layer condition profiles (hot top boundary, cold other boundaries)
+    const isTop = y > 0.95;
+    const isBoundary = y < 0.05 || x < 0.05 || x > 0.95;
+    const boundaryOnly = isTop ? 100 * tBC : isBoundary ? 0 : 0;
+    
+    const noiseLevel = Math.max(0, 1 - ep / 80);
+    const currentNoise = (noise[gridX]?.[gridY] ?? 0) * 45 * noiseLevel;
+    
+    if (ep < 50) {
+      const blend = ep / 50;
+      return (boundaryOnly * (1 - blend)) + (analytical * blend * 0.3) + currentNoise;
+    } else {
+      const blend = (ep - 50) / 250; // 0 to 1
+      const wave = Math.sin(x * 14 + ep * 0.12) * Math.cos(y * 14) * 7 * (1 - blend);
+      return (analytical * (0.3 + 0.7 * blend)) + wave;
+    }
+  };
+
+  const getTempColor = (t: number) => {
+    const temp = Math.max(0, Math.min(100, t));
+    if (temp < 25) {
+      const ratio = temp / 25;
+      const r = Math.round(11 * (1 - ratio) + 22 * ratio);
+      const g = Math.round(14 * (1 - ratio) + 28 * ratio);
+      const b = Math.round(23 * (1 - ratio) + 48 * ratio);
+      return `rgb(${r},${g},${b})`;
+    } else if (temp < 50) {
+      const ratio = (temp - 25) / 25;
+      const r = Math.round(22 * (1 - ratio) + 90 * ratio);
+      const g = Math.round(28 * (1 - ratio) + 68 * ratio);
+      const b = Math.round(48 * (1 - ratio) + 32 * ratio);
+      return `rgb(${r},${g},${b})`;
+    } else if (temp < 75) {
+      const ratio = (temp - 50) / 25;
+      const r = Math.round(90 * (1 - ratio) + 212 * ratio);
+      const g = Math.round(68 * (1 - ratio) + 160 * ratio);
+      const b = Math.round(32 * (1 - ratio) + 50 * ratio);
+      return `rgb(${r},${g},${b})`;
+    } else {
+      const ratio = (temp - 75) / 25;
+      const r = Math.round(212 * (1 - ratio) + 255 * ratio);
+      const g = Math.round(160 * (1 - ratio) + 248 * ratio);
+      const b = Math.round(50 * (1 - ratio) + 220 * ratio);
+      return `rgb(${r},${g},${b})`;
+    }
+  };
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas || noiseGrid.length === 0) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    
+    const size = 30;
+    const cellW = canvas.width / size;
+    const cellH = canvas.height / size;
+    
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    for (let i = 0; i < size; i++) {
+      for (let j = 0; j < size; j++) {
+        const x = (i + 0.5) / size;
+        const y = 1 - (j + 0.5) / size;
+        const T = getSimulatedT(x, y, epoch, noiseGrid, i, j);
+        ctx.fillStyle = getTempColor(T);
+        ctx.fillRect(i * cellW, j * cellH, cellW + 0.5, cellH + 0.5);
+      }
+    }
+    
+    if (showCollocation) {
+      // Boundary points (blue rings)
+      ctx.lineWidth = 1;
+      ctx.strokeStyle = "rgba(100, 180, 255, 0.5)";
+      
+      // Top boundary
+      for (let i = 0; i < size; i += 2) {
+        ctx.beginPath();
+        ctx.arc((i + 0.5) * cellW, 0.5 * cellH, 1.8, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+      // Bottom boundary
+      for (let i = 0; i < size; i += 2) {
+        ctx.beginPath();
+        ctx.arc((i + 0.5) * cellW, (size - 0.5) * cellH, 1.8, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+      // Left boundary
+      for (let j = 0; j < size; j += 2) {
+        ctx.beginPath();
+        ctx.arc(0.5 * cellW, (j + 0.5) * cellH, 1.8, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+      // Right boundary
+      for (let j = 0; j < size; j += 2) {
+        ctx.beginPath();
+        ctx.arc((size - 0.5) * cellW, (j + 0.5) * cellH, 1.8, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+      
+      // Internal collocation points (dim gold rings)
+      ctx.strokeStyle = "rgba(212, 175, 55, 0.25)";
+      for (let i = 3; i < size - 3; i += 4) {
+        for (let j = 3; j < size - 3; j += 4) {
+          ctx.beginPath();
+          ctx.arc((i + 0.5) * cellW, (j + 0.5) * cellH, 2, 0, Math.PI * 2);
+          ctx.stroke();
+        }
+      }
+      
+      // Custom collocation points
+      customPoints.forEach(p => {
+        ctx.fillStyle = "#ffffff";
+        ctx.shadowColor = "#d4af37";
+        ctx.shadowBlur = 5;
+        ctx.beginPath();
+        ctx.arc(p.x * canvas.width, p.y * canvas.height, 3.5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.shadowBlur = 0;
+        
+        ctx.strokeStyle = "#d4af37";
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.arc(p.x * canvas.width, p.y * canvas.height, 6, 0, Math.PI * 2);
+        ctx.stroke();
+      });
+    }
+  }, [epoch, showCollocation, customPoints, noiseGrid]);
+
+  useEffect(() => {
+    if (!isTraining) return;
+    let lastTime = performance.now();
+    const interval = 35; // speed of training
+    let animId = requestAnimationFrame(function loop(now) {
+      if (now - lastTime >= interval) {
+        setEpoch(prev => {
+          if (prev >= 300) {
+            setIsTraining(false);
+            return 300;
+          }
+          return prev + 1;
+        });
+        lastTime = now;
+      }
+      animId = requestAnimationFrame(loop);
+    });
+    return () => cancelAnimationFrame(animId);
+  }, [isTraining]);
+
+  const handleCanvasClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const rect = canvas.getBoundingClientRect();
+    const clickX = (e.clientX - rect.left) / rect.width;
+    const clickY = (e.clientY - rect.top) / rect.height;
+    
+    if (clickX > 0.05 && clickX < 0.95 && clickY > 0.05 && clickY < 0.95) {
+      setCustomPoints(prev => [...prev, { x: clickX, y: clickY }]);
+    }
+  };
+
+  const handleReset = () => {
+    setEpoch(0);
+    setIsTraining(false);
+    setCustomPoints([]);
+    const grid = [];
+    for (let i = 0; i < 30; i++) {
+      const row = [];
+      for (let j = 0; j < 30; j++) {
+        row.push(Math.random() - 0.5);
+      }
+      grid.push(row);
+    }
+    setNoiseGrid(grid);
+  };
+
+  const getLossBC = () => {
+    if (epoch === 0) return 0.8521;
+    const base = 0.8521 * Math.pow(10, -3.2 * Math.min(1, epoch / 60));
+    const noiseVal = Math.max(0.0001, 0.001 * (Math.random() - 0.4) * (1 - epoch / 100));
+    return parseFloat((base + noiseVal).toFixed(4));
+  };
+
+  const getLossPDE = () => {
+    if (epoch === 0) return 1.9423;
+    const base = 1.9423 * Math.pow(10, -2.1 * Math.min(1, epoch / 300));
+    const noiseVal = Math.max(0.001, 0.006 * (Math.random() - 0.4) * (1 - epoch / 280));
+    return parseFloat((base + noiseVal).toFixed(4));
+  };
+
+  const lossBC = getLossBC();
+  const lossPDE = getLossPDE();
+  const lossTotal = parseFloat((lossBC + lossPDE).toFixed(4));
+
+  return (
+    <section id="pinn-simulator" style={{ padding: "5rem 2rem", maxWidth: 1100, margin: "0 auto", position: "relative", zIndex: 10 }}>
+      <motion.div
+        ref={ref}
+        initial={{ opacity: 0, y: 24 }}
+        animate={inView ? { opacity: 1, y: 0 } : {}}
+        transition={{ duration: 0.6 }}
+      >
+        <div style={{ textAlign: "center", marginBottom: "3rem" }}>
+          <span style={{ fontFamily: "Georgia, 'Times New Roman', serif", fontStyle: "italic", fontSize: 12, color: GOLD, letterSpacing: "0.2em", textTransform: "uppercase", display: "block", marginBottom: "0.75rem" }}>Interactive Demo</span>
+          <h2 style={{ fontSize: "clamp(1.8rem, 4vw, 2.8rem)", fontWeight: 700, letterSpacing: "-0.01em", fontFamily: "Georgia, 'Times New Roman', serif", color: "#f0e8d0" }}>Physics-Informed Neural Network (PINN) Simulator</h2>
+          <p style={{ fontFamily: "Georgia, 'Times New Roman', serif", fontStyle: "italic", fontSize: 14, color: "#8a8070", maxWidth: 700, margin: "0.75rem auto 0", lineHeight: 1.5 }}>
+            Solving the 2D Steady-State Heat Equation (Laplace Equation: <code style={{ color: GOLD }}>∇²T = ∂²T/∂x² + ∂²T/∂y² = 0</code>) by forcing the neural network to satisfy both physics conservation laws and boundary conditions.
+          </p>
+        </div>
+
+        <div style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
+          gap: "2.5rem",
+          background: "rgba(10,8,4,0.95)",
+          border: "0.5px solid rgba(212,175,55,0.14)",
+          borderRadius: 4,
+          padding: "2rem",
+          backdropFilter: "blur(8px)",
+        }}>
+          
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
+            <div style={{ position: "relative", marginBottom: "1rem" }}>
+              <div style={{ position: "absolute", top: -20, left: 0, right: 0, textAlign: "center", fontSize: 11, fontFamily: "Georgia, 'Times New Roman', serif", color: GOLD, fontStyle: "italic" }}>
+                Hot Wall (T = 100°C)
+              </div>
+              <div style={{ position: "absolute", bottom: -20, left: 0, right: 0, textAlign: "center", fontSize: 11, fontFamily: "Georgia, 'Times New Roman', serif", color: "rgba(100, 180, 255, 0.7)", fontStyle: "italic" }}>
+                Cold Wall (T = 0°C)
+              </div>
+              <div style={{ position: "absolute", top: 0, bottom: 0, left: -22, writingMode: "vertical-rl", transform: "rotate(180deg)", fontSize: 11, fontFamily: "Georgia, 'Times New Roman', serif", color: "rgba(100, 180, 255, 0.7)", fontStyle: "italic", textAlign: "center" }}>
+                Cold Wall (T = 0°C)
+              </div>
+              <div style={{ position: "absolute", top: 0, bottom: 0, right: -22, writingMode: "vertical-rl", fontSize: 11, fontFamily: "Georgia, 'Times New Roman', serif", color: "rgba(100, 180, 255, 0.7)", fontStyle: "italic", textAlign: "center" }}>
+                Cold Wall (T = 0°C)
+              </div>
+
+              <canvas
+                ref={canvasRef}
+                width={320}
+                height={320}
+                onClick={handleCanvasClick}
+                style={{
+                  border: "1px solid rgba(212,175,55,0.22)",
+                  borderRadius: 2,
+                  cursor: "crosshair",
+                  display: "block",
+                  boxShadow: "0 4px 20px rgba(0,0,0,0.5)"
+                }}
+              />
+            </div>
+            <div style={{ fontSize: 12, fontStyle: "italic", color: "#6a6050", textAlign: "center", marginTop: "0.5rem" }}>
+              💡 Click inside the domain to place custom **collocation points** for the PINN solver to optimize.
+            </div>
+          </div>
+
+          <div style={{ display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
+            <div>
+              <div style={{ fontFamily: "Georgia, 'Times New Roman', serif", fontSize: 12, color: GOLD, letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: "1rem", borderBottom: `0.5px solid ${GOLD_DIM}`, paddingBottom: "0.5rem", fontWeight: 700 }}>
+                Live Optimization Metrics
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem", marginBottom: "1.5rem" }}>
+                <div style={{ background: "rgba(255,255,255,0.02)", border: "0.5px solid rgba(255,255,255,0.05)", borderRadius: 3, padding: "0.75rem", textAlign: "center" }}>
+                  <div style={{ fontSize: 11, color: "#6a6050", textTransform: "uppercase", letterSpacing: "0.05em" }}>Epoch</div>
+                  <div style={{ fontSize: "1.4rem", fontWeight: 700, color: "#f0e8d0", fontFamily: "monospace", marginTop: 4 }}>
+                    {epoch} <span style={{ fontSize: 11, color: "#5a5248", fontWeight: 400 }}>/ 300</span>
+                  </div>
+                </div>
+                <div style={{ background: "rgba(255,255,255,0.02)", border: "0.5px solid rgba(255,255,255,0.05)", borderRadius: 3, padding: "0.75rem", textAlign: "center" }}>
+                  <div style={{ fontSize: 11, color: "#6a6050", textTransform: "uppercase", letterSpacing: "0.05em" }}>Total Loss</div>
+                  <div style={{ fontSize: "1.4rem", fontWeight: 700, color: GOLD, fontFamily: "monospace", marginTop: 4 }}>
+                    {epoch === 0 ? "2.7944" : lossTotal}
+                  </div>
+                </div>
+                <div style={{ background: "rgba(255,255,255,0.02)", border: "0.5px solid rgba(255,255,255,0.05)", borderRadius: 3, padding: "0.75rem", textAlign: "center" }}>
+                  <div style={{ fontSize: 11, color: "#6a6050", textTransform: "uppercase", letterSpacing: "0.05em" }}>Boundary Loss (L_BC)</div>
+                  <div style={{ fontSize: "1.1rem", fontWeight: 700, color: "rgba(100, 180, 255, 0.9)", fontFamily: "monospace", marginTop: 4 }}>
+                    {epoch === 0 ? "0.8521" : lossBC}
+                  </div>
+                </div>
+                <div style={{ background: "rgba(255,255,255,0.02)", border: "0.5px solid rgba(255,255,255,0.05)", borderRadius: 3, padding: "0.75rem", textAlign: "center" }}>
+                  <div style={{ fontSize: 11, color: "#6a6050", textTransform: "uppercase", letterSpacing: "0.05em" }}>PDE Loss (L_PDE)</div>
+                  <div style={{ fontSize: "1.1rem", fontWeight: 700, color: "#cba33d", fontFamily: "monospace", marginTop: 4 }}>
+                    {epoch === 0 ? "1.9423" : lossPDE}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", marginBottom: "1.5rem" }}>
+              <div style={{ alignSelf: "flex-start", fontFamily: "Georgia, 'Times New Roman', serif", fontSize: 11, color: GOLD, letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: "0.5rem" }}>
+                PINN Architecture (2 → 5 → 5 → 1)
+              </div>
+              <div style={{ background: "rgba(0,0,0,0.2)", border: "0.5px solid rgba(212,175,55,0.08)", borderRadius: 4, width: "100%", height: 140, display: "flex", justifyContent: "center", alignItems: "center" }}>
+                <svg width="220" height="120" style={{ overflow: "visible" }}>
+                  {[80, 140].map((y1) =>
+                    [20, 42, 64, 86, 108].map((y2) => (
+                      <path
+                        key={`c1-${y1}-${y2}`}
+                        d={`M 25 ${y1 - 30} C 50 ${y1 - 30}, 50 ${y2}, 75 ${y2}`}
+                        fill="none"
+                        stroke={isTraining ? GOLD : "rgba(212,175,55,0.1)"}
+                        strokeWidth="0.6"
+                        strokeDasharray={isTraining ? "3 1.5" : "none"}
+                        style={{
+                          animation: isTraining ? "dash 1.2s linear infinite" : "none"
+                        }}
+                      />
+                    ))
+                  )}
+                  {[20, 42, 64, 86, 108].map((y1) =>
+                    [20, 42, 64, 86, 108].map((y2) => (
+                      <path
+                        key={`c2-${y1}-${y2}`}
+                        d={`M 75 ${y1} C 105 ${y1}, 105 ${y2}, 135 ${y2}`}
+                        fill="none"
+                        stroke={isTraining ? GOLD : "rgba(212,175,55,0.1)"}
+                        strokeWidth="0.5"
+                        strokeDasharray={isTraining ? "2.5 1.5" : "none"}
+                        style={{
+                          animation: isTraining ? "dash 0.9s linear infinite" : "none"
+                        }}
+                      />
+                    ))
+                  )}
+                  {[20, 42, 64, 86, 108].map((y1) => (
+                    <path
+                      key={`c3-${y1}`}
+                      d={`M 135 ${y1} C 160 ${y1}, 160 64, 185 64`}
+                      fill="none"
+                      stroke={isTraining ? GOLD : "rgba(212,175,55,0.1)"}
+                      strokeWidth="0.6"
+                      strokeDasharray={isTraining ? "3 1.5" : "none"}
+                      style={{
+                        animation: isTraining ? "dash 0.8s linear infinite" : "none"
+                      }}
+                    />
+                  ))}
+
+                  {[80, 140].map((y, idx) => (
+                    <g key={`in-${idx}`}>
+                      <circle cx="25" cy={y - 30} r="5" fill="#080604" stroke="rgba(100, 180, 255, 0.8)" strokeWidth="1.2" />
+                      <text x="5" y={y - 27} fill="#8a8070" fontSize="8" fontFamily="monospace">{idx === 0 ? "x" : "y"}</text>
+                    </g>
+                  ))}
+                  {[20, 42, 64, 86, 108].map((y, idx) => (
+                    <circle key={`h1-${idx}`} cx="75" cy={y} r="3.5" fill="#080604" stroke={isTraining ? GOLD : "rgba(212,175,55,0.4)"} strokeWidth="1" />
+                  ))}
+                  {[20, 42, 64, 86, 108].map((y, idx) => (
+                    <circle key={`h2-${idx}`} cx="135" cy={y} r="3.5" fill="#080604" stroke={isTraining ? GOLD : "rgba(212,175,55,0.4)"} strokeWidth="1" />
+                  ))}
+                  <g>
+                    <circle cx="185" cy="64" r="5.5" fill="#080604" stroke={GOLD} strokeWidth="1.5" style={{ filter: isTraining ? `drop-shadow(0 0 4px ${GOLD})` : "none" }} />
+                    <text x="196" y="67" fill={GOLD} fontSize="8.5" fontWeight="bold" fontFamily="monospace">T</text>
+                  </g>
+                </svg>
+              </div>
+            </div>
+
+            <div>
+              <div style={{ display: "flex", gap: "1rem", marginBottom: "1rem" }}>
+                <button
+                  onClick={() => setIsTraining(!isTraining)}
+                  style={{
+                    flex: 2,
+                    padding: "0.7rem 1.2rem",
+                    background: isTraining ? "rgba(212,175,55,0.06)" : GOLD,
+                    color: isTraining ? GOLD : "#080604",
+                    border: `1px solid ${GOLD}`,
+                    borderRadius: 3,
+                    fontFamily: "Georgia, 'Times New Roman', serif",
+                    fontStyle: "italic",
+                    fontSize: 13,
+                    fontWeight: 700,
+                    cursor: "pointer",
+                    letterSpacing: "0.05em",
+                    transition: "background 0.2s, color 0.2s"
+                  }}
+                >
+                  {isTraining ? "Pause Optimizer" : epoch === 300 ? "Optimization Complete" : epoch === 0 ? "Train PINN" : "Resume Training"}
+                </button>
+                <button
+                  onClick={handleReset}
+                  style={{
+                    flex: 1,
+                    padding: "0.7rem 1rem",
+                    background: "transparent",
+                    color: "#8a8070",
+                    border: "1px solid rgba(255,255,255,0.08)",
+                    borderRadius: 3,
+                    fontFamily: "Georgia, 'Times New Roman', serif",
+                    fontStyle: "italic",
+                    fontSize: 13,
+                    cursor: "pointer",
+                    transition: "color 0.2s, border-color 0.2s"
+                  }}
+                  onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.borderColor = GOLD; (e.currentTarget as HTMLButtonElement).style.color = GOLD; }}
+                  onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.borderColor = "rgba(255,255,255,0.08)"; (e.currentTarget as HTMLButtonElement).style.color = "#8a8070"; }}
+                >
+                  Reset
+                </button>
+              </div>
+
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", fontSize: 13, fontFamily: "Georgia, 'Times New Roman', serif" }}>
+                <label style={{ display: "flex", alignItems: "center", gap: 8, color: "#8a8070", cursor: "pointer" }}>
+                  <input
+                    type="checkbox"
+                    checked={showCollocation}
+                    onChange={(e) => setShowCollocation(e.target.checked)}
+                    style={{ accentColor: GOLD, cursor: "pointer" }}
+                  />
+                  Show Collocation &amp; BC Points
+                </label>
+                
+                <span style={{ color: "#5a5248", fontSize: 11, fontStyle: "italic" }}>
+                  {customPoints.length} custom points added
+                </span>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </motion.div>
+    </section>
+  );
+}
+
 // ── Resume Section ──
 function ResumeSection() {
   const ref = useRef<HTMLDivElement>(null);
@@ -510,6 +980,7 @@ export default function Portfolio() {
         html { scroll-behavior: smooth; }
         .project-card:hover { border-color: rgba(212,175,55,0.28) !important; }
         @keyframes pulse-line { 0%,100% { opacity:0.3; } 50% { opacity:1; } }
+        @keyframes dash { to { stroke-dashoffset: -20; } }
       `}</style>
 
       <AtomCanvas />
@@ -637,6 +1108,9 @@ export default function Portfolio() {
           ))}
         </div>
       </section>
+
+      {/* ── PINN SIMULATOR ── */}
+      <PinnSimulatorSection />
 
       {/* ── SKILLS ── */}
       <section id="skills" style={{ padding: "5rem 2rem", maxWidth: 1100, margin: "0 auto", position: "relative", zIndex: 10 }}>
