@@ -127,7 +127,7 @@ function Counter({ target }: { target: number }) {
 }
 
 // ── Atom Canvas Background ──
-// ── Aerodynamic Flow Canvas Background (Jet Plume Simulation) ──
+// ── Aerodynamic Flow Canvas Background (Airfoil Wind-Tunnel Simulation) ──
 function AerodynamicFlowCanvas() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const mouseRef = useRef<{ x: number; y: number; active: boolean }>({ x: 0, y: 0, active: false });
@@ -139,6 +139,7 @@ function AerodynamicFlowCanvas() {
     if (!ctx) return;
     
     let animId: number;
+    let time = 0;
     
     const resize = () => {
       canvas.width = window.innerWidth;
@@ -147,29 +148,26 @@ function AerodynamicFlowCanvas() {
     resize();
     window.addEventListener("resize", resize);
 
-    const particleCount = 200;
+    const particleCount = 120;
     const particles: {
       x: number;
       y: number;
-      vx: number;
-      vy: number;
+      speed: number;
       size: number;
       life: number;
       maxLife: number;
-      expansionRate: number;
+      yOffset: number;
     }[] = [];
 
-    // Initialize particles off-screen
     for (let i = 0; i < particleCount; i++) {
       particles.push({
-        x: -50,
-        y: -50,
-        vx: 0,
-        vy: 0,
-        size: 0,
-        life: 999,
-        maxLife: 100,
-        expansionRate: 0,
+        x: Math.random() * window.innerWidth,
+        y: Math.random() * window.innerHeight,
+        speed: 3 + Math.random() * 3,
+        size: 0.8 + Math.random() * 1.0,
+        life: Math.random() * 200,
+        maxLife: 200 + Math.random() * 100,
+        yOffset: (Math.random() - 0.5) * 10, // vertical band spreading
       });
     }
 
@@ -184,90 +182,173 @@ function AerodynamicFlowCanvas() {
     window.addEventListener("mousemove", handleMouseMove);
     window.addEventListener("mouseleave", handleMouseLeave);
 
+    // Mathematical NACA 0012 Airfoil Profile half-thickness helper
+    const getAirfoilThickness = (xNorm: number, chord: number) => {
+      if (xNorm < 0 || xNorm > 1) return 0;
+      // NACA 0012 thickness distribution coefficient (tau = 0.12)
+      const yt = 0.6 * (
+        0.2969 * Math.sqrt(xNorm) - 
+        0.1260 * xNorm - 
+        0.3516 * xNorm * xNorm + 
+        0.2843 * Math.pow(xNorm, 3) - 
+        0.1015 * Math.pow(xNorm, 4)
+      );
+      return yt * chord;
+    };
+
     const draw = () => {
-      ctx.fillStyle = "rgba(10, 10, 11, 0.12)";
+      // Wind tunnel motion blur clear
+      ctx.fillStyle = "rgba(11, 15, 25, 0.12)";
       ctx.fillRect(0, 0, canvas.width, canvas.height);
+      
+      time += 1.0;
       
       const W = canvas.width;
       const H = canvas.height;
 
-      const nozzle = mouseRef.current.active 
-        ? mouseRef.current 
-        : { x: W * 0.08, y: H * 0.5 };
+      // Airfoil Location: center-left
+      const cx = W * 0.25;
+      const cy = H * 0.5;
+      const chord = 160; // wing size
 
-      const spawnPerFrame = 4;
-      let spawned = 0;
-      for (let i = 0; i < particleCount; i++) {
-        if (particles[i].life >= particles[i].maxLife || particles[i].x > W) {
-          particles[i].x = nozzle.x;
-          particles[i].y = nozzle.y + (Math.random() - 0.5) * 12;
-          particles[i].vx = 6 + Math.random() * 7;
-          particles[i].vy = (Math.random() - 0.5) * 1.5;
-          particles[i].size = 2.5 + Math.random() * 3.5;
-          particles[i].life = 0;
-          particles[i].maxLife = 40 + Math.random() * 50;
-          particles[i].expansionRate = (Math.random() - 0.5) * 0.1;
-          
-          spawned++;
-          if (spawned >= spawnPerFrame) break;
-        }
+      // Calculate angle of attack (alpha) based on mouse vertical position
+      // Mouse high -> positive angle of attack, Mouse low -> negative angle of attack
+      let alpha = 0.05; // default angle of attack
+      if (mouseRef.current.active) {
+        const dyMouse = mouseRef.current.y - cy;
+        // Limit angle of attack to [-20, 20] degrees
+        alpha = Math.max(-0.35, Math.min(0.35, dyMouse / (H * 0.4)));
+      } else {
+        // Subtle idle oscillation of angle of attack
+        alpha = Math.sin(time * 0.015) * 0.12;
       }
 
+      // 1. Draw virtual wing profile (NACA 0012 Airfoil)
       ctx.save();
-      const nozzleGlow = ctx.createRadialGradient(nozzle.x, nozzle.y, 0, nozzle.x, nozzle.y, 35);
-      nozzleGlow.addColorStop(0, "rgba(255, 140, 0, 0.25)");
-      nozzleGlow.addColorStop(0.5, "rgba(230, 0, 58, 0.08)");
-      nozzleGlow.addColorStop(1, "rgba(0,0,0,0)");
+      ctx.translate(cx, cy);
+      ctx.rotate(alpha);
+      
       ctx.beginPath();
-      ctx.arc(nozzle.x, nozzle.y, 35, 0, Math.PI * 2);
-      ctx.fillStyle = nozzleGlow;
+      const segments = 45;
+      // Upper surface
+      for (let i = 0; i <= segments; i++) {
+        const xNorm = i / segments;
+        const yt = getAirfoilThickness(xNorm, chord);
+        ctx.lineTo(xNorm * chord, -yt);
+      }
+      // Lower surface
+      for (let i = segments; i >= 0; i--) {
+        const xNorm = i / segments;
+        const yt = getAirfoilThickness(xNorm, chord);
+        ctx.lineTo(xNorm * chord, yt);
+      }
+      ctx.closePath();
+      ctx.fillStyle = "rgba(15, 23, 42, 0.9)";
+      ctx.strokeStyle = "rgba(0, 245, 160, 0.4)";
+      ctx.lineWidth = 1.8;
       ctx.fill();
+      ctx.stroke();
       ctx.restore();
 
+      // 2. Render and update streamlines
       particles.forEach((p) => {
-        if (p.life >= p.maxLife) return;
-
-        p.x += p.vx;
-        p.y += p.vy;
+        p.x += p.speed;
         p.life += 1;
 
-        p.vx *= 0.982;
-        p.vy += p.expansionRate;
+        if (p.x > W || p.life > p.maxLife) {
+          p.x = 0;
+          p.y = Math.random() * H;
+          p.life = 0;
+          p.speed = 3.5 + Math.random() * 3.5;
+        }
 
-        const dx = p.x - nozzle.x;
-        const turbulence = Math.min(2.5, dx * 0.012);
-        p.y += (Math.random() - 0.5) * turbulence;
-        
-        const currentSize = p.size * (1 + (p.life / p.maxLife) * 0.8);
-        const tau = p.life / p.maxLife;
-        let colorStr = "255, 77, 0";
-        let alpha = 0.5;
+        // Relative coordinates to wing center
+        const dx = p.x - cx;
+        const dy = p.y - cy;
 
-        if (tau < 0.18) {
-          colorStr = "255, 215, 0";
-          alpha = 0.7;
-        } else if (tau < 0.55) {
-          colorStr = "255, 77, 0";
-          alpha = 0.55;
-        } else if (tau < 0.82) {
-          colorStr = "230, 0, 58";
-          alpha = 0.35;
+        // Rotate into airfoil coordinate system (aligned with chord line)
+        const cosA = Math.cos(-alpha);
+        const sinA = Math.sin(-alpha);
+        const xr = dx * cosA - dy * sinA;
+        const yr = dx * sinA + dy * cosA;
+
+        let finalX = p.x;
+        let finalY = p.y;
+        let speedMult = 1.0;
+
+        // Flow deflection over airfoil chord range
+        if (xr >= 0 && xr <= chord) {
+          const xNorm = xr / chord;
+          const thickness = getAirfoilThickness(xNorm, chord);
+
+          // Deflect based on whether the streamline is on upper or lower surface
+          const influenceRange = 55; // vertical range of deflection
+          if (yr < 0 && yr > -influenceRange) {
+            // Upper surface flow: deflected upwards
+            const ratio = (influenceRange + yr) / influenceRange; // 1 at surface, 0 at outer bound
+            const deflection = thickness * ratio;
+            const yrDeflected = yr - deflection;
+            
+            // Re-rotate back to global frame
+            finalX = cx + xr * Math.cos(alpha) - yrDeflected * Math.sin(alpha);
+            finalY = cy + xr * Math.sin(alpha) + yrDeflected * Math.cos(alpha);
+            
+            // Bernoulli effect: flow accelerates over top of wing
+            speedMult = 1.0 + 0.35 * (thickness / chord) * ratio;
+          } else if (yr >= 0 && yr < influenceRange) {
+            // Lower surface flow: deflected downwards
+            const ratio = (influenceRange - yr) / influenceRange;
+            const deflection = thickness * ratio;
+            const yrDeflected = yr + deflection;
+            
+            finalX = cx + xr * Math.cos(alpha) - yrDeflected * Math.sin(alpha);
+            finalY = cy + xr * Math.sin(alpha) + yrDeflected * Math.cos(alpha);
+            
+            // Flow decelerates slightly under the wing for positive lift
+            speedMult = 1.0 - 0.1 * (thickness / chord) * ratio;
+          }
+        }
+
+        // Downstream wake turbulence behind the wing
+        if (xr > chord && xr < chord + W * 0.4) {
+          const dxWake = xr - chord;
+          const decay = Math.exp(-dxWake * 0.002);
+          const turbulence = Math.sin(time * 0.12 - dxWake * 0.02) * Math.cos(time * 0.03) * 3 * decay;
+          
+          // Deflect wake center based on Angle of Attack
+          const wakeCenterY = dxWake * Math.sin(alpha);
+          finalY += wakeCenterY + turbulence;
+        }
+
+        // Scale horizontal particle speed based on Bernoulli multiplier
+        p.x += (p.speed * (speedMult - 1.0));
+
+        // Styling stream lines: cyan-mint where flow accelerates, teal elsewhere
+        let colorStr = "0, 245, 160"; // Mint
+        if (speedMult > 1.08) {
+          colorStr = "0, 245, 210"; // White-hot mint/cyan
+        } else if (speedMult < 1.0) {
+          colorStr = "15, 118, 110"; // Deep Teal
         } else {
-          colorStr = "90, 80, 85";
-          alpha = 0.15 * (1 - (tau - 0.82) / 0.18);
+          colorStr = "20, 184, 166"; // Standard Teal
         }
 
-        ctx.save();
+        const alphaVal = Math.min(1, 1 - p.life / p.maxLife) * 0.4;
+
         ctx.beginPath();
-        ctx.arc(p.x, p.y, currentSize, 0, Math.PI * 2);
-        ctx.fillStyle = `rgba(${colorStr}, ${alpha})`;
-        
-        if (tau < 0.18) {
-          ctx.shadowColor = `rgba(${colorStr}, 0.5)`;
-          ctx.shadowBlur = 6;
-        }
+        ctx.arc(finalX, finalY, p.size, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(${colorStr}, ${alphaVal})`;
         ctx.fill();
-        ctx.restore();
+
+        // Particle trail ribbons
+        if (finalX > 10) {
+          ctx.beginPath();
+          ctx.moveTo(finalX - p.speed * 1.8 * speedMult, finalY);
+          ctx.lineTo(finalX, finalY);
+          ctx.strokeStyle = `rgba(${colorStr}, ${alphaVal * 0.3})`;
+          ctx.lineWidth = p.size * 0.6;
+          ctx.stroke();
+        }
       });
 
       animId = requestAnimationFrame(draw);
@@ -338,11 +419,10 @@ function ProjectCard({ project, delay }: { project: Project; delay: number }) {
   );
 }
 
-const RED_ORANGE = "#ff4d00";
-const CRIMSON = "#e6003a";
-const ACCENT_DIM = "rgba(255, 77, 0, 0.15)";
-const GOLD = RED_ORANGE;
-const GOLD_DIM = ACCENT_DIM;
+const AERO_MINT = "#00f5a0";
+const MINT_DIM = "rgba(0, 245, 160, 0.15)";
+const GOLD = AERO_MINT;
+const GOLD_DIM = MINT_DIM;
 
 // ── Experience Item ──
 function ExpItem({ company, role, period, desc, delay }: { company: string; role: string; period: string; desc: string; delay: number }) {
@@ -1013,7 +1093,7 @@ export default function Portfolio() {
   }, []);
 
   return (
-    <div style={{ background: "#0a0a0b", color: "#e3e3e3", overflowX: "hidden", minHeight: "100vh" }}>
+    <div style={{ background: "#0f1319", color: "#cbd5e1", overflowX: "hidden", minHeight: "100vh" }}>
 
       <style>{`
         * { 
@@ -1024,26 +1104,26 @@ export default function Portfolio() {
         }
         html { scroll-behavior: smooth; }
 
-        /* Jet-Engine Plume thermal gradient headers */
+        /* Modernized wind-tunnel mint gradient headers */
         .gradient-title {
-          background: linear-gradient(135deg, #ff4d00 0%, #e6003a 100%) !important;
+          background: linear-gradient(135deg, #00f5a0 0%, #00d2ff 100%) !important;
           -webkit-background-clip: text !important;
           background-clip: text !important;
           -webkit-text-fill-color: transparent !important;
           color: transparent !important;
         }
 
-        /* Glassmorphic card styling overrides for matte charcoal/red theme */
+        /* Glassmorphic card styling overrides for matte slate/mint theme */
         .project-card, #skills > div > div, #pinn-simulator > div > div {
-          background: rgba(16, 16, 18, 0.82) !important;
-          border: 0.5px solid rgba(255, 77, 0, 0.15) !important;
+          background: rgba(15, 23, 42, 0.75) !important;
+          border: 0.5px solid rgba(0, 245, 160, 0.15) !important;
           backdrop-filter: blur(12px) !important;
           border-radius: 6px !important;
         }
         
         .project-card:hover {
-          border-color: #ff4d00 !important;
-          box-shadow: 0 0 25px rgba(255, 77, 0, 0.22) !important;
+          border-color: #00f5a0 !important;
+          box-shadow: 0 0 25px rgba(0, 245, 160, 0.22) !important;
         }
 
         /* Custom scrollbar matching styling */
@@ -1051,49 +1131,49 @@ export default function Portfolio() {
           width: 8px;
         }
         ::-webkit-scrollbar-track {
-          background: #0a0a0b;
+          background: #0f1319;
         }
         ::-webkit-scrollbar-thumb {
-          background: rgba(255, 77, 0, 0.2);
+          background: rgba(0, 245, 160, 0.2);
           border-radius: 4px;
         }
         ::-webkit-scrollbar-thumb:hover {
-          background: rgba(255, 77, 0, 0.4);
+          background: rgba(0, 245, 160, 0.4);
         }
 
-        /* Simulator SVG tweaks mapping to Red/Orange */
+        /* Simulator SVG tweaks mapping to Mint */
         #pinn-simulator svg path {
-          stroke: rgba(255, 77, 0, 0.15) !important;
+          stroke: rgba(0, 245, 160, 0.15) !important;
         }
         #pinn-simulator svg path[style*="animation"] {
-          stroke: #ff4d00 !important;
+          stroke: #00f5a0 !important;
         }
         #pinn-simulator svg circle {
-          stroke: rgba(255, 77, 0, 0.35) !important;
+          stroke: rgba(0, 245, 160, 0.35) !important;
         }
         #pinn-simulator svg circle[stroke="#d4af37"] {
-          stroke: #ff4d00 !important;
+          stroke: #00f5a0 !important;
         }
 
         /* Project card and CV tags overrides */
         .project-card span {
-          background: rgba(255, 77, 0, 0.05) !important;
-          border: 0.5px solid rgba(255, 77, 0, 0.22) !important;
-          color: #ff4d00 !important;
+          background: rgba(0, 245, 160, 0.05) !important;
+          border: 0.5px solid rgba(0, 245, 160, 0.22) !important;
+          color: #00f5a0 !important;
         }
         #resume span {
-          background: rgba(255, 77, 0, 0.05) !important;
-          border: 0.5px solid rgba(255, 77, 0, 0.18) !important;
-          color: #ff4d00 !important;
+          background: rgba(0, 245, 160, 0.05) !important;
+          border: 0.5px solid rgba(0, 245, 160, 0.18) !important;
+          color: #00f5a0 !important;
         }
         #resume a {
-          background: rgba(255, 77, 0, 0.04) !important;
-          border-color: rgba(255, 77, 0, 0.2) !important;
-          color: #ff4d00 !important;
+          background: rgba(0, 245, 160, 0.04) !important;
+          border-color: rgba(0, 245, 160, 0.2) !important;
+          color: #00f5a0 !important;
         }
         #resume a:hover {
-          background: rgba(255, 77, 0, 0.1) !important;
-          border-color: rgba(255, 77, 0, 0.4) !important;
+          background: rgba(0, 245, 160, 0.1) !important;
+          border-color: rgba(0, 245, 160, 0.4) !important;
         }
 
         @keyframes pulse-line { 0%,100% { opacity:0.3; } 50% { opacity:1; } }
@@ -1107,9 +1187,9 @@ export default function Portfolio() {
         position: "fixed", top: 0, left: 0, right: 0, zIndex: 100,
         display: "flex", alignItems: "center", justifyContent: "space-between",
         padding: "1rem 2.5rem",
-        background: scrolled ? "rgba(10, 10, 12, 0.88)" : "rgba(10, 10, 12, 0.48)",
+        background: scrolled ? "rgba(15, 23, 42, 0.88)" : "rgba(15, 23, 42, 0.48)",
         backdropFilter: "blur(14px)",
-        borderBottom: `0.5px solid rgba(255, 77, 0, 0.12)`,
+        borderBottom: `0.5px solid rgba(0, 245, 160, 0.12)`,
         transition: "background 0.3s",
       }}>
         <span style={{ fontFamily: "Georgia, 'Times New Roman', serif", fontStyle: "italic", color: GOLD, fontSize: 15, letterSpacing: "0.05em" }}>O. Kidilay</span>
