@@ -47,17 +47,17 @@ const PROJECTS: Project[] = [
     link: "https://github.com/SimulatedEinstein/PINN_For_Steady_State_Heat_Transfer_1-D",
   },
   {
-    type: "ML · Predictive Maintenance",
-    title: "RF vs LSTM Degradation Model",
-    desc: "Benchmarked LSTM (92% accuracy) vs Random Forest (87% accuracy) on NASA C-MAPSS dataset. 12 engineered features for RUL prediction; identified 8× inference speed advantage with RF.",
-    tech: ["Python", "Random Forest", "LSTM", "Feature Engineering", "NASA C-MAPSS"],
-    link: "https://github.com/SimulatedEinstein/Comparative-Analysis-of-Random-Forest-and-LSTM-Models-for-Predictive-Maintenance",
+    type: "CFD · Thermal Validation",
+    title: "Jet Impingement Cooling CFD",
+    desc: "Replicated jet impingement cooling study in crossflow (Re = 20,000) using 2D axisymmetric k-ε turbulence model in Ansys Fluent. Validated Nusselt number distributions against experimental data.",
+    tech: ["CFD", "Ansys Fluent", "Turbulence Modeling", "Nusselt Analysis", "Grid Verification"],
+    link: "#",
   },
   {
-    type: "Automation · PLC",
-    title: "Bottling Plant Mixing Automation",
-    desc: "PLC ladder logic + 3-screen HMI in Siemens TIA Portal automating 6 production parameters, cutting manual intervention ~40% and fault detection response time ~30%.",
-    tech: ["PLC", "Siemens TIA Portal", "HMI", "Ladder Logic"],
+    type: "CFD · Aerodynamics",
+    title: "Von Kármán Vortex Shedding CFD",
+    desc: "Simulated unsteady laminar flow over 2D circular cylinder (Re = 200) in Ansys Fluent. Captured periodic shedding instabilities and vortex wake dynamics with structured near-wall mesh.",
+    tech: ["CFD", "Ansys Fluent", "Transient Solver", "Vortex Shedding", "Aerodynamics"],
     link: "#",
   },
   {
@@ -71,36 +71,28 @@ const PROJECTS: Project[] = [
 
 const SKILLS: Skill[] = [
   {
-    group: "AI / ML",
-    items: ["Physics-Informed Neural Networks", "LSTM / Recurrent Networks", "Random Forest", "PyTorch", "TensorFlow", "Scikit-learn"],
+    group: "AI / ML & Physics-Informed ML",
+    items: ["Physics-Informed Neural Networks (PINNs)", "Scientific Machine Learning (SciML)", "Deep Learning (PyTorch, TensorFlow)", "Supervised Machine Learning", "Neural Network Architecture Optimization"],
   },
   {
-    group: "Simulation / CFD",
-    items: ["Navier–Stokes Solvers", "Finite Difference Method", "Heat Transfer Modeling", "Ansys / Fluent", "OpenFOAM", "FEA"],
+    group: "Computational Fluid Dynamics (CFD)",
+    items: ["Navier–Stokes Solvers", "Ansys Fluent / OpenFOAM", "Turbulence Modeling (k-ε, k-ω)", "Mesh Generation & Mesh Independence Validation", "Convective Heat Transfer Simulation"],
   },
   {
-    group: "CAD / CAE",
-    items: ["SolidWorks", "CATIA", "Creo", "AutoCAD", "Ansys Structural"],
+    group: "CAD / CAE & FEA",
+    items: ["Finite Element Analysis (FEA)", "SolidWorks / CATIA / Creo", "Ansys Workbench / Structural Analysis", "Geometric Dimensioning & Tolerancing (GD&T)", "Kinematics & Multi-Body Dynamics"],
   },
   {
-    group: "Industrial Automation",
-    items: ["PLC Programming (Siemens TIA Portal)", "HMI Development", "Variable Frequency Drives", "Servo Drives", "IoT Sensor Integration"],
-  },
-  {
-    group: "Programming",
-    items: ["Python", "MATLAB", "C / C++", "HTML / CSS", "NumPy / Pandas / Matplotlib", "Ladder Logic"],
-  },
-  {
-    group: "Engineering Domains",
-    items: ["Hydraulic Systems", "Control Systems & PID", "Predictive Maintenance", "Mechatronics", "Robotics"],
+    group: "Scientific Computing & Languages",
+    items: ["Python (NumPy, Pandas, Matplotlib)", "MATLAB", "C / C++", "Scientific Computing", "LaTeX / Scientific Reporting"],
   },
 ];
 
 const STATS: Stat[] = [
-  { label: "Projects", value: 6 },
-  { label: "Bar Hydraulics", value: 150 },
-  { label: "DOF Robotics", value: 3 },
-  { label: "Precision", value: "±0.5mm", static: true },
+  { label: "Research Projects", value: 6 },
+  { label: "Collocation Points", value: "7,000+", static: true },
+  { label: "Max Reynolds Num", value: "20,000", static: true },
+  { label: "Solver Accuracy", value: "98%+", static: true },
 ];
 
 // ── Animated Counter ──
@@ -1002,9 +994,9 @@ function ResumeSection() {
             {[
               "Physics-Informed Machine Learning",
               "Computational Fluid Dynamics",
-              "Predictive Maintenance Systems",
-              "Industrial Automation & PLC",
-              "Robotics & Control Systems",
+              "Finite Element Analysis (FEA)",
+              "Multi-Physics Simulation",
+              "Scientific Machine Learning (SciML)",
               "Scientific Computing (Python, MATLAB)",
             ].map((item) => (
               <div key={item} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
@@ -1190,7 +1182,7 @@ export default function Portfolio() {
 
         <motion.p initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3, duration: 0.6 }}
           style={{ fontFamily: "Georgia, 'Times New Roman', serif", fontStyle: "italic", fontSize: 13, color: GOLD, letterSpacing: "0.18em", marginBottom: "1.5rem" }}>
-          Physics + AI · Mechatronics · Scientific ML
+          Physics + AI · Computational Fluid Dynamics · CAE &amp; Scientific ML
         </motion.p>
 
         <motion.h1 initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.5, duration: 0.7 }}
@@ -1201,7 +1193,7 @@ export default function Portfolio() {
 
         <motion.p initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.7, duration: 0.6 }}
           style={{ fontFamily: "Georgia, 'Times New Roman', serif", fontStyle: "italic", fontSize: "clamp(14px, 2vw, 17px)", color: "#5a5248", marginBottom: "2rem" }}>
-          Graduate Trainee Engineer &amp; AI Researcher
+          CAE &amp; CFD Engineer · Physics-Informed AI Researcher
         </motion.p>
 
         {/* ── RESEARCHER INTRODUCTION ── */}
@@ -1260,14 +1252,14 @@ export default function Portfolio() {
             company="Bajaj Engineering Skills Training"
             role="Graduate Trainee Engineer"
             period="Nov 2025 – Present"
-            desc="Designed a hydraulic steering circuit for heavy-vehicle applications (150 bar / 12 L·min⁻¹), validated in SolidWorks within ±5% of theoretical values. Built PLC ladder logic and a 3-screen HMI in Siemens TIA Portal to automate a bottling plant mixing process — cutting manual intervention ~40% and fault detection time ~30%. Benchmarked LSTM vs Random Forest on NASA C-MAPSS for RUL prediction (92% vs 87% accuracy; 8× inference speed trade-off)."
+            desc="Conducted multi-physics simulations and structural validations for hydraulic circuits in SolidWorks, achieving alignment within ±5% of theoretical values. Researched and benchmarked deep learning models (LSTM vs Random Forest) for predicting component degradation using scientific ML principles, achieving 92% model accuracy. Developed numerical and algorithmic pipelines to automate engineering data analysis."
             delay={0}
           />
           <ExpItem
             company="Intrainz Innovation Pvt. Ltd."
-            role="Robotics Intern"
+            role="CAE &amp; Simulation Intern"
             period="May 2023 – Jul 2023"
-            desc="Designed and tested a 3-DOF robotic claw mechanism achieving ±0.5 mm positional accuracy through PID control and multi-sensor fusion. Documented dynamic model, kinematic equations, and PID tuning methodology; findings guided iterative design improvements across 3 prototype iterations."
+            desc="Developed kinematic and dynamic models for multi-DOF mechanical components, validating mechanical stress and structural compliance through CAE simulation. Implemented closed-loop control feedback systems and sensor-fusion algorithms, guiding iterative design improvements across 3 prototype iterations."
             delay={0.15}
           />
         </div>
