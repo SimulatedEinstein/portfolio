@@ -388,7 +388,7 @@ function ResumeSection() {
         </div>
 
         <div style={{ textAlign: "center", marginBottom: "3rem" }}>
-          <a href="#"
+          <a href="/OjasResume (9).pdf" target="_blank" rel="noreferrer"
             style={{ display: "inline-flex", alignItems: "center", gap: 10, padding: "0.8rem 2rem", border: `1px solid ${GOLD_DIM}`, borderRadius: 3, fontFamily: "Georgia, 'Times New Roman', serif", fontStyle: "italic", fontSize: 14, color: GOLD, textDecoration: "none", background: "rgba(212,175,55,0.04)", transition: "background 0.2s, border-color 0.2s", letterSpacing: "0.05em" }}
             onMouseEnter={(e) => { (e.currentTarget as HTMLAnchorElement).style.background = "rgba(212,175,55,0.1)"; (e.currentTarget as HTMLAnchorElement).style.borderColor = `rgba(212,175,55,0.5)`; }}
             onMouseLeave={(e) => { (e.currentTarget as HTMLAnchorElement).style.background = "rgba(212,175,55,0.04)"; (e.currentTarget as HTMLAnchorElement).style.borderColor = GOLD_DIM; }}
@@ -581,7 +581,7 @@ export default function Portfolio() {
             onMouseLeave={(e) => ((e.currentTarget as HTMLAnchorElement).style.background = GOLD)}>
             View Projects
           </a>
-          <a href="/OjasResume (4).pdf" style={{ padding: "0.7rem 2rem", borderRadius: 3, fontFamily: "Georgia, 'Times New Roman', serif", fontStyle: "italic", fontSize: 14, letterSpacing: "0.05em", background: "transparent", color: GOLD, border: `1px solid rgba(212,175,55,0.3)`, textDecoration: "none", transition: "background 0.2s" }}
+          <a href="/OjasResume (9).pdf" target="_blank" rel="noreferrer" style={{ padding: "0.7rem 2rem", borderRadius: 3, fontFamily: "Georgia, 'Times New Roman', serif", fontStyle: "italic", fontSize: 14, letterSpacing: "0.05em", background: "transparent", color: GOLD, border: `1px solid rgba(212,175,55,0.3)`, textDecoration: "none", transition: "background 0.2s" }}
             onMouseEnter={(e) => ((e.currentTarget as HTMLAnchorElement).style.background = "rgba(212,175,55,0.08)")}
             onMouseLeave={(e) => ((e.currentTarget as HTMLAnchorElement).style.background = "transparent")}>
             View Résumé
